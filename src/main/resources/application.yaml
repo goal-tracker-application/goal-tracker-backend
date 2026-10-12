@@ -1,3 +1,46 @@
 spring:
   application:
     name: goal-tracker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  servlet:
+    context-path: /api
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+
+---
+# ==========================================
+# Development profile (dev)
+# ==========================================
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+
+---
+# ==========================================
+# Production profile (prod)
+# ==========================================
+spring:
+  config:
+    activate:
+      on-profile: prod
