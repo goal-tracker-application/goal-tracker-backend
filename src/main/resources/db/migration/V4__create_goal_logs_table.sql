@@ -1,4 +1,4 @@
-CREATE TABLE goal_logs (
+CREATE TABLE IF NOT EXISTS goal_logs (
     id BIGSERIAL PRIMARY KEY,
     goal_id BIGINT NOT NULL,
     log_date DATE NOT NULL,
@@ -12,4 +12,4 @@ CREATE TABLE goal_logs (
     CONSTRAINT uk_goal_log_per_day UNIQUE (goal_id, log_date)
 );
 
-CREATE INDEX idx_goal_logs_goal_date ON goal_logs (goal_id, log_date);
+CREATE INDEX IF NOT EXISTS idx_goal_logs_goal_date ON goal_logs (goal_id, log_date);
