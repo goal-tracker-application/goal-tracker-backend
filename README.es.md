@@ -1,4 +1,4 @@
-#goal-tracker-backend
+# goal-tracker-backend
 
 [Leer este README en inglés (English)](README.md)
 
