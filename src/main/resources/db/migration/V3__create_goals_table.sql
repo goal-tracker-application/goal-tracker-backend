@@ -1,4 +1,4 @@
-CREATE TABLE goals (
+CREATE TABLE IF NOT EXISTS goals (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     parent_id BIGINT,
@@ -18,6 +18,6 @@ CREATE TABLE goals (
         REFERENCES goal_statuses (id)
 );
 
-CREATE INDEX idx_goals_user_id ON goals (user_id);
-CREATE INDEX idx_goals_parent_id ON goals (parent_id);
-CREATE INDEX idx_goals_status_id ON goals (status_id);
+CREATE INDEX IF NOT EXISTS idx_goals_user_id ON goals (user_id);
+CREATE INDEX IF NOT EXISTS idx_goals_parent_id ON goals (parent_id);
+CREATE INDEX IF NOT EXISTS idx_goals_status_id ON goals (status_id);
