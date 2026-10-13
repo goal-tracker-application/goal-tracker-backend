@@ -83,9 +83,12 @@ public class JwtProvider {
     }
 
     /**
-     * Extracts the username (Subject) contained within the JWT token.
+     * Extracts the user email (stored as the subject) from the JWT token.
+     *
+     * @param token The JWT token string.
+     * @return The user email.
      */
-    public String getUsernameFromToken(String token) {
+    public String getEmailFromToken(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
