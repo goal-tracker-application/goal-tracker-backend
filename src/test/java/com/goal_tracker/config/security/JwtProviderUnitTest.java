@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Evaluates JWT token generation, parsing, claim extraction (subject and user_id),
  * and validation under symmetric HMAC-SHA signatures without roles.
  * </p>
- */
+ */ 
 class JwtProviderUnitTest {
 
     private JwtProvider jwtProvider;
@@ -42,15 +42,15 @@ class JwtProviderUnitTest {
     @DisplayName("generateTokenAndExtractClaims: Should generate a valid JWT token and correctly extract claims")
     void generateTokenAndExtractClaimsShouldProcessDataSuccessfully() {
         Long userId = 42L;
-        String username = "alex.tracker";
+        String email = "alex.tracker@example.com";
 
-        String token = jwtProvider.generateToken(userId, username);
+        String token = jwtProvider.generateToken(userId, email);
 
-        String extractedUsername = jwtProvider.getUsernameFromToken(token);
+        String extractedEmail = jwtProvider.getEmailFromToken(token);
         Long extractedUserId = jwtProvider.getUserIdFromToken(token);
 
         assertThat(token, is(notNullValue()));
-        assertThat(extractedUsername, is(username));
+        assertThat(extractedEmail, is(email));
         assertThat(extractedUserId, instanceOf(Long.class));
         assertThat(extractedUserId, is(42L));
         assertTrue(jwtProvider.validateToken(token));
@@ -67,11 +67,11 @@ class JwtProviderUnitTest {
     @DisplayName("validateToken: Should return false when token signature does not match secret key")
     void validateTokenShouldReturnFalseWhenSignatureIsInvalid() {
         Long userId = 42L;
-        String username = "alex.tracker";
+        String email = "alex.tracker@example.com";
 
         SecretKey foreignKey = Keys.hmacShaKeyFor(invalidSecret.getBytes(StandardCharsets.UTF_8));
         String tokenWithForeignSignature = Jwts.builder()
-                .subject(username)
+                .subject(email)
                 .claim("user_id", userId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + testExpirationMs))
