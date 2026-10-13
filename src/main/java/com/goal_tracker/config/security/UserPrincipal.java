@@ -8,10 +8,10 @@ package com.goal_tracker.config.security;
  * across application services and controllers without requiring additional database lookups.
  * </p>
  * UserPrincipal
- * @param id The unique database identifier of the authenticated user
- * @param username The unique login username of the authenticated user
+    * @param id The unique database identifier of the authenticated user
+    * @param email The unique login email of the authenticated user
  */
 public record UserPrincipal(
         Long id,
-        String username
+        String email
 ) {}
