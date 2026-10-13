@@ -28,7 +28,17 @@ logging:
   level:
     root: INFO
     org.springframework: INFO
-
+    
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      group:
+        ping:
+          include: ping
 ---
 # ==========================================
 # Development profile (dev)
