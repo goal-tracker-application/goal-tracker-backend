@@ -34,11 +34,6 @@ management:
     web:
       exposure:
         include: health
-  endpoint:
-    health:
-      group:
-        ping:
-          include: ping
 ---
 # ==========================================
 # Development profile (dev)
