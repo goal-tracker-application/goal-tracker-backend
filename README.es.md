@@ -56,3 +56,104 @@ export interface ErrorResponse {
 | `ERR_INVALID_GOAL_HIERARCHY` | Ocurre cuando la jerarquía de metas no es válida (ej., una meta no puede ser su propio padre o generar dependencias circulares). | 409 Conflict |
 | `ERR_GOAL_DATE_RANGE_INVALID` | Ocurre cuando la fecha de inicio es posterior a la fecha de finalización de una meta. | 422 Unprocessable Entity |
 | `ERR_INTERNAL_SERVER_ERROR` | Red de seguridad final para capturar excepciones inesperadas del sistema (caídas de conectividad, punteros nulos o fallas imprevistas de infraestructura). La trazabilidad completa permanece oculta detrás del `trackingId`. | 500 Internal Server Error |
+
+## 2. Seguridad
+
+### Spring Security
+
+La aplicación está asegurada mediante Spring Security, otorgando acceso público explícito a los endpoints operacionales (como las verificaciones de salud del Actuator) y a las rutas de autenticación, mientras se protegen los endpoints privados de la API.
+
+### JWT (JSON Web Tokens)
+
+La autenticación sin estado (*stateless*) se implementa mediante JWT. Una vez que un usuario inicia sesión o se registra exitosamente, se emite un token que debe incluirse en la cabecera `Authorization` (`Bearer <token>`) para acceder a los recursos protegidos.
+
+### CORS (Intercambio de Orígenes Cruzados)
+
+CORS está configurado globalmente para permitir que clientes autorizados (como aplicaciones de frontend) se comuniquen de forma segura con los endpoints de la API.
+
+## 3. Configuración y Variables de Entorno
+
+La aplicación se configura mediante propiedades en el archivo de configuración y se alimenta principalmente de variables de entorno para garantizar la seguridad y flexibilidad en distintos entornos:
+
+- **Base de Datos (PostgreSQL):** Utiliza `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` y `SPRING_DATASOURCE_PASSWORD`. Su política de esquema está configurada en `validate` (confiando en **Flyway** para las migraciones en `classpath:db/migration`).
+- **Seguridad y JWT:** El secreto para la firma de los tokens y su tiempo de expiración se configuran a través de `APP_SECURITY_JWT_SECRET` y `APP_SECURITY_JWT_EXPIRATION_MS` (con un valor por defecto seguro para pruebas locales).
+- **CORS:** Los orígenes permitidos para peticiones de clientes externos se gestionan mediante `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
+- **Ruta Base (Context Path):** Todos los endpoints de la API se exponen bajo el prefijo `/api`.
+- **Perfiles:** Se pueden activar perfiles específicos como `dev` (que habilita logs detallados de SQL y consultas en Hibernate para debugging) o `prod`.
+
+## 4. Actuator para la indicación de salud de la base de datos
+
+Se puede acceder al siguiente endpoint para verificar la salud del sistema, específicamente la conexión de la base de datos:
+
+* **GET** `/actuator/health/` - Verifica el estado de la conexión a la base de datos y devuelve la siguiente respuesta JSON formateada:
+
+     ``` json
+    {
+        "application": "Goal Tracker API",
+        "database": "UP",
+        "timestamp": "2001-12-30T01:01:01"
+    }
+    ```
+    
+    - **Detalles de los atributos:**
+
+        * `application`: Nombre de la aplicación.
+        * `database`: Estado de la conexión a la base de datos, puede ser `UP` o `DOWN`.
+        * `timestamp`: Marca de tiempo actual en formato `yyyy-mm-ddTHH:MM:SS`.
+
+## 5. Pruebas
+
+### Configuración de Testcontainers
+
+#### Configuración en Linux
+
+Para permitir que Testcontainers se ejecute utilizando la instalación local de Docker, ejecute el siguiente comando:
+``` bash
+echo "api.version=1.44" > ~/.docker-java.properties
+```
+
+#### Configuración en VS Code
+
+Para habilitar Testcontainers en **VS Code**, agregue la siguiente configuración en la raíz del proyecto:
+- Cree la carpeta oculta **.vscode**:
+``` bash
+mkdir .vscode
+```
+
+- Cree el archivo **settings.json**:
+``` bash
+touch settings.json
+```
+
+- Abra o edite el archivo:
+``` bash
+nano settings.json
+```
+
+- Agregue este contenido al archivo, guarde con **Ctrl+O** y cierre el archivo con **Ctrl+X**:
+``` json
+{
+    "java.test.config": {
+        "vmArgs": [
+            "-Ddocker.host=unix:///run/docker.sock",
+            "-Dtestcontainers.docker.socket.override=/run/docker.sock"
+        ]
+    },
+    "terminal.integrated.env.linux": {
+        "DOCKER_HOST": "unix:///run/docker.sock"
+    },
+    "java.configuration.updateBuildConfiguration": "interactive"
+}
+```
+
+### Ejecución de las pruebas
+
+- **Ejecutar la suite completa de pruebas:** Ejecuta todas las pruebas unitarias y de integración utilizando el perfil de configuración `test`, empleando Testcontainers para la conexión a la base de datos:
+``` bash
+./mvnw test
+```
+
+- **Ejecutar una suite de pruebas específica:** Ejecuta las pruebas de un archivo específico:
+``` bash
+./mvnw test -Dtest=NombreDelArchivoSinExtension
+```
