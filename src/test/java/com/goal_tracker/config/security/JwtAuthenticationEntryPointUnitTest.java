@@ -1,8 +1,15 @@
 package com.goal_tracker.config.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.goal_tracker.errors.ErrorCode;
-import com.goal_tracker.errors.ErrorResponse;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.emptyString;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
+
+import java.io.IOException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,18 +19,15 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.AuthenticationException;
 
-import java.io.IOException;
+import com.goal_tracker.errors.ErrorCode;
+import com.goal_tracker.errors.ErrorResponse;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.CoercionAction;
+import tools.jackson.databind.cfg.CoercionInputShape;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.type.LogicalType;
 
-/**
- * Unit test suite for {@link JwtAuthenticationEntryPoint}.
- * <p>
- * Evaluates authentication exception handling (HTTP 401 Unauthorized), correct configuration
- * of HTTP response headers, and JSON serialization of the standard error structure.
- * </p>
- */
 class JwtAuthenticationEntryPointUnitTest {
 
     private JwtAuthenticationEntryPoint authenticationEntryPoint;
@@ -34,7 +38,12 @@ class JwtAuthenticationEntryPointUnitTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
+        objectMapper = JsonMapper.builder()
+            .withCoercionConfig(LogicalType.Integer, config -> 
+                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+            )
+            .build();
+        
         authenticationEntryPoint = new JwtAuthenticationEntryPoint(objectMapper);
         request = new MockHttpServletRequest();
         response = new MockHttpServletResponse();
