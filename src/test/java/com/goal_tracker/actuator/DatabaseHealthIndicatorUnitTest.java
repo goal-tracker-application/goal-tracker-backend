@@ -18,7 +18,7 @@ import static org.mockito.Mockito.when;
 /**
  * Unit tests for {@link DatabaseHealthIndicator}.
  */
-class DatabaseHealthIndicatorTest {
+class DatabaseHealthIndicatorUnitTest {
 
     private DataSource dataSource;
     private Connection connection;
