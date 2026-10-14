@@ -7,10 +7,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -23,9 +20,6 @@ import java.time.OffsetDateTime;
  */
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 @Entity
 @Table(name = "users")
 @EntityListeners(AuditingEntityListener.class)
@@ -53,7 +47,6 @@ public class User {
     /**
      * Indicates whether the user is a guest.
      */
-    @Builder.Default
     @Column(name = "is_guest", nullable = false)
     private Boolean isGuest = false;
 
@@ -76,4 +69,19 @@ public class User {
     @LastModifiedDate
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+        /**
+     * Default no-arg constructor required by JPA.
+     * Explicitly defined to prevent bytecode corruption issues with annotation processors.
+     */
+    public User() {
+        super();
+    }
+
+    public User(String email, String passwordHash, Boolean isGuest, OffsetDateTime expiresAt) {
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.isGuest = isGuest;
+        this.expiresAt = expiresAt;
+    }
 }
