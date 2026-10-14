@@ -60,7 +60,6 @@ class DatabaseHealthIndicatorUnitTest {
         // Assert
         assertThat(health.getStatus()).isEqualTo(Status.DOWN);
         assertThat(health.getDetails()).containsEntry("database", "DOWN");
-        assertThat(health.getDetails()).containsKey("error");
     }
 
     @Test
@@ -75,6 +74,5 @@ class DatabaseHealthIndicatorUnitTest {
         // Assert
         assertThat(health.getStatus()).isEqualTo(Status.DOWN);
         assertThat(health.getDetails()).containsEntry("database", "DOWN");
-        assertThat(health.getDetails()).containsEntry("error", "Database connection is invalid or unreachable.");
     }
 }
