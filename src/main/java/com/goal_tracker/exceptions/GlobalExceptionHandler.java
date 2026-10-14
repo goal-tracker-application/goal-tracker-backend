@@ -13,7 +13,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -166,6 +168,23 @@ public class GlobalExceptionHandler {
             errorId
         );
 
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    /**
+     * Handles {@link NoResourceFoundException} when a requested static resource or endpoint cannot be found.
+     *
+     * @param ex the thrown resource not found exception.
+     * @return a structured {@link ResponseEntity} containing error details with an HTTP 404 status.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(NoResourceFoundException ex) {
+        ErrorResponse errorResponse = new ErrorResponse(
+            ErrorCode.ERR_NOT_FOUND.name(),
+            ErrorCode.ERR_NOT_FOUND.getDefaultMessage(),
+            ex.getMessage(),
+            generateTrackingId()
+        );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
     }
 
