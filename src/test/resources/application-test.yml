@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:16-alpine:///goal_tracker_test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration_test
+    
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
