@@ -1,8 +1,10 @@
 package com.goal_tracker.errors;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Collections;
 import java.util.List;
+
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 /**
  * Data Transfer Object (DTO) standardized for representing error responses in the API.
@@ -11,7 +13,8 @@ import java.util.List;
  * collections during JSON serialization via {@link JsonInclude.Include#NON_EMPTY}.
  * </p>
  */
-@JsonInclude(JsonInclude.Include.NON_EMPTY)
+@JsonSerialize(using = ErrorResponseSerializer.class)
+@JsonDeserialize(using = ErrorResponseDeserializer.class)
 public class ErrorResponse {
 
     /**
@@ -63,6 +66,7 @@ public class ErrorResponse {
     public ErrorResponse(String code, String message, String detail, String trackingId) {
         this(code, message, detail != null ? List.of(detail) : Collections.emptyList(), trackingId);
     }
+    
 
     /**
      * Complete constructor for multiple details structured as a list of messages.
@@ -78,6 +82,7 @@ public class ErrorResponse {
         this.details = details != null ? details : Collections.emptyList();
         this.trackingId = trackingId;
     }
+
 
     /**
      * Gets the error code.
