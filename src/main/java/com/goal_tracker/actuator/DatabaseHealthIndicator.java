@@ -62,7 +62,6 @@ public class DatabaseHealthIndicator implements HealthIndicator {
                     .withDetail("application", "Goal Tracker API")
                     .withDetail("database", dbStatus)
                     .withDetail("timestamp", LocalDateTime.now())
-                    .withDetail("error", "Database connection is invalid or unreachable.")
                     .build();
         }
     }

@@ -56,3 +56,106 @@ export interface ErrorResponse {
 | `ERR_INVALID_GOAL_HIERARCHY` | Occurs when the goal hierarchy is invalid (e.g., a goal cannot be its own parent or generate circular dependencies). | 409 Conflict |
 | `ERR_GOAL_DATE_RANGE_INVALID` | Occurs when the start date is later than the end date for a goal. | 422 Unprocessable Entity |
 | `ERR_INTERNAL_SERVER_ERROR` | Final safety net to capture unexpected system exceptions (connectivity drops, null pointers, or unforeseen infrastructure failures). Full traceability remains hidden behind the `trackingId`. | 500 Internal Server Error |
+
+## 2. Security
+
+### Spring Security
+
+The application is secured using Spring Security, with public access explicitly granted to operational endpoints (such as Actuator health checks) and authentication routes, while securing private API endpoints.
+
+### JWT (JSON Web Tokens)
+
+Stateless authentication is implemented using JWT. Once a user successfully logs in or registers, a token is issued, which must be included in the `Authorization` header (`Bearer <token>`) to access protected resources.
+
+### CORS (Cross-Origin Resource Sharing)
+
+CORS is configured globally to allow authorized clients (such as frontend applications) to communicate securely with the API endpoints.
+
+## 3. Configuration and Environment Variables
+
+The application is configured through property files and relies heavily on environment variables to ensure security and flexibility across different environments:
+
+- **Database (PostgreSQL):** Uses `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. Its schema policy is set to `validate` (relying on **Flyway** for migrations located in `classpath:db/migration`).
+- **Security & JWT:** The secret key for token signing and expiration time are configured via `APP_SECURITY_JWT_SECRET` and `APP_SECURITY_JWT_EXPIRATION_MS` (with a secure fallback default for local testing).
+- **CORS:** Allowed origins for external client requests are managed using `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
+- **Context Path:** All API endpoints are exposed under the `/api` prefix.
+- **Profiles:** Specific profiles can be activated, such as `dev` (which enables detailed Hibernate SQL and query binding logs for debugging) or `prod`.
+
+## 4. Actuator for Database Health Indication
+
+The following endpoint can be accessed to check the health of the system, specifically the database connection:
+
+* **GET** `/actuator/health/` - It checks the status of the database connection and returns the following formatted JSON response:
+
+    ``` json
+    {
+        "application": "Goal Tracker API",
+        "database": "UP",
+        "timestamp": "2001-12-30T01:01:01"
+    }
+    ```
+    
+    - **Attribute details:**
+
+        * `application`: Name of the application.
+        * `database`: Database connection status, can be `UP` or `DOWN`.
+        * `timestamp`: Current timestamp in `yyyy-mm-ddTHH:MM:SS` format.
+
+## 5. Testing
+
+### Configuring Testcontainers
+
+#### Linux Configuration
+
+To enable Testcontainers to run using the local Docker installation, run the following command:
+``` bash
+echo "api.version=1.44" > ~/.docker-java.properties
+```
+
+#### VS Code Configuration
+
+To enable Testcontainers in **VS Code**, add the following configuration to the root of the project:
+- Create the **.vscode** hidden folder:
+``` bash
+mkdir .vscode
+```
+
+- Create the **settings.json** file:
+``` bash
+touch settings.json
+```
+
+- Open or edit the file:
+``` bash
+nano settings.json
+```
+
+- Add this content to the file, save with **Ctrl+O**, and close the file with **Ctrl+X**:
+``` json
+{
+    "java.test.config": {
+        "vmArgs": [
+            "-Ddocker.host=unix:///run/docker.sock",
+            "-Dtestcontainers.docker.socket.override=/run/docker.sock"
+        ]
+    },
+    "terminal.integrated.env.linux": {
+        "DOCKER_HOST": "unix:///run/docker.sock"
+    },
+    "java.configuration.updateBuildConfiguration": "interactive"
+}
+```
+
+### Running the Tests
+
+- **Run the full test suite:** Runs all unit and integration tests using the `test` configuration profile, utilizing Testcontainers for the database connection:
+
+``` bash
+./mvnw test
+```
+
+- **Run a specific test suite:** Runs the tests of a specific file:
+
+``` bash
+./mvnw test -Dtest=NameOfTheTestFileWithOutExtention
+```
