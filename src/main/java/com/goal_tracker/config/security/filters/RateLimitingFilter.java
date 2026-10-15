@@ -86,7 +86,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         boolean resolved = proxyManager.builder()
                 .build(bucketKey, () -> bucketConfiguration)
                 .tryConsume(1);
-
+        
         if (!resolved) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json");
