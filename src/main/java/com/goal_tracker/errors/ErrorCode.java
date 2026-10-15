@@ -80,6 +80,13 @@ public enum ErrorCode {
     ERR_GOAL_DATE_RANGE_INVALID("The start date cannot be later than the end date of the goal."),
 
     /**
+     * HTTP 429 - Too Many Requests.
+     * Occurs when the client has sent too many requests in a given amount of time 
+     * (rate-limiting threshold exceeded).
+     */
+    ERR_TOO_MANY_REQUESTS("Too many requests. Please try again later."),
+    
+    /**
      * HTTP 500 - Internal Server Error.
      * Final safety net to capture unexpected system exceptions 
      * (connectivity drops, null pointers, or unforeseen infrastructure failures).
