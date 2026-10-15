@@ -9,6 +9,7 @@ RESTful API backend service for Goal Tracker built with Spring Boot, PostgreSQL,
 The application is configured through properties in the configuration file and relies primarily on environment variables to ensure security and flexibility across different environments:
 
 - **Database (PostgreSQL):** Uses `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. Its schema policy is set to `validate` (relying on **Flyway** for migrations at `classpath:db/migration`).
+- **Redis (Cache & Rate Limiting):** Configured via `REDIS_HOST` and `REDIS_PORT` to establish the connection for state persistence (defaulting to `localhost` and `6379` for local environments).
 - **Security & JWT:** The secret key for token signing and its expiration time are configured via `APP_SECURITY_JWT_SECRET` and `APP_SECURITY_JWT_EXPIRATION_MS` (with a secure default value for local testing).
 - **Rate Limiting (IP Protection):** Managed under the `app.security.rate-limit` prefix, allowing configuration of maximum capacity, refill rate, and periodicity via environment variables:
   - `APP_SECURITY_RATE_LIMIT_CAPACITY` (default: `5` tokens).
