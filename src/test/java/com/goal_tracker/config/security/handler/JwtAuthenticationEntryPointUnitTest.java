@@ -1,4 +1,4 @@
-package com.goal_tracker.config.security;
+package com.goal_tracker.config.security.handler;
 
 import java.io.IOException;
 

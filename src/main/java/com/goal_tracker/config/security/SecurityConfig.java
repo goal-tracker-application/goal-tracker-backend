@@ -13,6 +13,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import com.goal_tracker.config.security.filters.JwtAuthenticationFilter;
+import com.goal_tracker.config.security.handler.JwtAuthenticationEntryPoint;
 
 /**
  * HTTP security configuration.
