@@ -97,6 +97,32 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles exceptions inheriting from {@link BadRequestException}.
+     * <p>
+     * Captures all domain-specific bad request failures and returns a structured response
+     * with an HTTP status 400 (Bad Request).
+     * </p>
+     *
+     * @param ex The captured {@link BadRequestException}.
+     * @return {@link ResponseEntity} containing the {@link ErrorResponse} DTO and HTTP status 400.
+     */
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequestExceptions(BadRequestException ex) {
+        String errorId = generateTrackingId();
+
+        log.warn("[{}] Bad request detected. Error Code: '{}', Detail: '{}'", 
+            errorId, ex.getErrorCode().name(), ex.getMessage());
+    
+        ErrorResponse errorResponse = new ErrorResponse(
+            ex.getErrorCode().name(),
+            ex.getErrorCode().getDefaultMessage(),
+            ex.getMessage(),
+            errorId
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+            
+    /**
      * Handles invalid credential exceptions generated during authentication.
      * <p>
      * Captures instances of {@link BadCredentialsException} thrown by Spring Security
