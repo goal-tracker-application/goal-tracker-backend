@@ -10,6 +10,10 @@ La aplicación se configura mediante propiedades en el archivo de configuración
 
 - **Base de Datos (PostgreSQL):** Utiliza `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` y `SPRING_DATASOURCE_PASSWORD`. Su política de esquema está configurada en `validate` (confiando en **Flyway** para las migraciones en `classpath:db/migration`).
 - **Seguridad y JWT:** El secreto para la firma de los tokens y su tiempo de expiración se configuran a través de `APP_SECURITY_JWT_SECRET` y `APP_SECURITY_JWT_EXPIRATION_MS` (con un valor por defecto seguro para pruebas locales).
+- **Rate Limiting (Protección IP):** Se gestiona bajo el prefijo `app.security.rate-limit` y permite configurar la capacidad máxima, la tasa de recarga y su periodicidad mediante variables de entorno:
+  - `APP_SECURITY_RATE_LIMIT_CAPACITY` (por defecto: `5` tokens).
+  - `APP_SECURITY_RATE_LIMIT_REFILL_TOKENS` (por defecto: `5` tokens).
+  - `APP_SECURITY_RATE_LIMIT_REFILL_DURATION_MINUTES` (por defecto: `1` minuto).
 - **CORS:** Los orígenes permitidos para peticiones de clientes externos se gestionan mediante `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
 - **Ruta Base (Context Path):** Todos los endpoints de la API se exponen bajo el prefijo `/api`.
 - **Perfiles:** Se pueden activar perfiles específicos como `dev` (que habilita logs detallados de SQL y consultas en Hibernate para debugging) o `prod`.
@@ -27,6 +31,10 @@ La autenticación sin estado (*stateless*) se implementa mediante JWT. Una vez q
 ### CORS (Intercambio de Orígenes Cruzados)
 
 CORS está configurado globalmente para permitir que clientes autorizados (como aplicaciones de frontend) se comuniquen de forma segura con los endpoints de la API.
+
+### Rate Limiting (Protección basada en IP)
+
+Para proteger los endpoints de autenticación y registro (`/auth/**`) contra ataques de fuerza bruta y abusos automatizados, la aplicación implementa un mecanismo distribuido de limitación de tasa (*rate-limiting*) basado en IP respaldado por **Redis** y **Bucket4j**. Las solicitudes que superan el umbral configurado son interceptadas y bloqueadas con una respuesta **HTTP 429 (Too Many Requests)**.
 
 ## 3. Puntos de acceso
 
@@ -50,7 +58,7 @@ Se puede acceder al siguiente endpoint para verificar la salud del sistema, espe
         * `database`: Estado de la conexión a la base de datos, puede ser `UP` o `DOWN`.
         * `timestamp`: Marca de tiempo actual en formato `yyyy-mm-ddTHH:MM:SS`.
 
-### Autenticacion (Publico)
+### Autenticación (Pública)
 
 * **POST** `/auth/register` - Valida los datos de registro, crea una cuenta de usuario regular y devuelve un JWT de acceso.
     - **Request Payload Example:**
@@ -183,6 +191,7 @@ Todas las respuestas de error de la API están estandarizadas bajo el Objeto de 
 | `ERR_DUPLICATE_GOAL_LOG` | Ocurre al intentar crear una entrada de progreso (check-in) para una meta en una fecha que ya tiene un registro existente. | 409 Conflict |
 | `ERR_INVALID_GOAL_HIERARCHY` | Ocurre cuando la jerarquía de metas no es válida (ej., una meta no puede ser su propio padre o generar dependencias circulares). | 409 Conflict |
 | `ERR_GOAL_DATE_RANGE_INVALID` | Ocurre cuando la fecha de inicio es posterior a la fecha de finalización de una meta. | 422 Unprocessable Entity |
+| `ERR_TOO_MANY_REQUESTS` | Se ha superado el límite de peticiones permitidas (rate-limiting) para los endpoints de autenticación y registro (`/auth/**`), protegiendo al sistema contra abusos o ataques de fuerza bruta. | 429 Too Many Requests |
 | `ERR_INTERNAL_SERVER_ERROR` | Red de seguridad final para capturar excepciones inesperadas del sistema (caídas de conectividad, punteros nulos o fallas imprevistas de infraestructura). La trazabilidad completa permanece oculta detrás del `trackingId`. | 500 Internal Server Error |
 
 ## 4. Pruebas

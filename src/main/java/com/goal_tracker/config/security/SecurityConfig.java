@@ -12,6 +12,10 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import com.goal_tracker.config.security.filters.JwtAuthenticationFilter;
+import com.goal_tracker.config.security.filters.RateLimitingFilter;
+import com.goal_tracker.config.security.handler.JwtAuthenticationEntryPoint;
+
 /**
  * HTTP security configuration.
  */
@@ -21,16 +25,19 @@ public class SecurityConfig {
 
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final CorsConfigurationSource corsConfigurationSource;
 
     /**
-     * Dependency injection for the 401 exception entry point, JWT filter, and CORS source.
+     * Dependency injection for the 401 exception entry point, JWT filter, Rate Limiting filter, and CORS source.
      */
     public SecurityConfig(JwtAuthenticationEntryPoint authenticationEntryPoint,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
+                          RateLimitingFilter rateLimitingFilter,
                           CorsConfigurationSource corsConfigurationSource) {
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
         this.corsConfigurationSource = corsConfigurationSource;
     }
 
@@ -64,6 +71,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
 
+                // Enforce IP-based rate limiting before the JWT and standard filters
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
                 .build();

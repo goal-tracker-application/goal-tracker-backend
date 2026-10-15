@@ -6,13 +6,17 @@ RESTful API backend service for Goal Tracker built with Spring Boot, PostgreSQL,
 
 ## 1. Configuration and Environment Variables
 
-The application is configured through property files and relies heavily on environment variables to ensure security and flexibility across different environments:
+The application is configured through properties in the configuration file and relies primarily on environment variables to ensure security and flexibility across different environments:
 
-- **Database (PostgreSQL):** Uses `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. Its schema policy is set to `validate` (relying on **Flyway** for migrations located in `classpath:db/migration`).
-- **Security & JWT:** The secret key for token signing and expiration time are configured via `APP_SECURITY_JWT_SECRET` and `APP_SECURITY_JWT_EXPIRATION_MS` (with a secure fallback default for local testing).
+- **Database (PostgreSQL):** Uses `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. Its schema policy is set to `validate` (relying on **Flyway** for migrations at `classpath:db/migration`).
+- **Security & JWT:** The secret key for token signing and its expiration time are configured via `APP_SECURITY_JWT_SECRET` and `APP_SECURITY_JWT_EXPIRATION_MS` (with a secure default value for local testing).
+- **Rate Limiting (IP Protection):** Managed under the `app.security.rate-limit` prefix, allowing configuration of maximum capacity, refill rate, and periodicity via environment variables:
+  - `APP_SECURITY_RATE_LIMIT_CAPACITY` (default: `5` tokens).
+  - `APP_SECURITY_RATE_LIMIT_REFILL_TOKENS` (default: `5` tokens).
+  - `APP_SECURITY_RATE_LIMIT_REFILL_DURATION_MINUTES` (default: `1` minute).
 - **CORS:** Allowed origins for external client requests are managed using `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
-- **Context Path:** All API endpoints are exposed under the `/api` prefix.
-- **Profiles:** Specific profiles can be activated, such as `dev` (which enables detailed Hibernate SQL and query binding logs for debugging) or `prod`.
+- **Base Path (Context Path):** All API endpoints are exposed under the `/api` prefix.
+- **Profiles:** Specific profiles such as `dev` (which enables detailed SQL and Hibernate query logs for debugging) or `prod` can be activated.
 
 ## 2. Security
 
@@ -27,6 +31,10 @@ Stateless authentication is implemented using JWT. Once a user successfully logs
 ### CORS (Cross-Origin Resource Sharing)
 
 CORS is configured globally to allow authorized clients (such as frontend applications) to communicate securely with the API endpoints.
+
+### Rate Limiting (IP-based Protection)
+
+To protect authentication and registration endpoints (`/auth/**`) against brute-force attacks and automated abuse, the application enforces a distributed IP-based rate-limiting mechanism backed by **Redis** and **Bucket4j**. Requests exceeding the configured threshold are intercepted and blocked with an **HTTP 429 (Too Many Requests)** response.
 
 ## 3. Endpoints
 
@@ -185,6 +193,7 @@ All API error responses are standardized under the `ErrorResponse` Data Transfer
 | `ERR_DUPLICATE_GOAL_LOG` | Occurs when attempting to create a progress entry (check-in) for a goal on a date that already has an existing entry. | 409 Conflict |
 | `ERR_INVALID_GOAL_HIERARCHY` | Occurs when the goal hierarchy is invalid (e.g., a goal cannot be its own parent or generate circular dependencies). | 409 Conflict |
 | `ERR_GOAL_DATE_RANGE_INVALID` | Occurs when the start date is later than the end date for a goal. | 422 Unprocessable Entity |
+| `ERR_TOO_MANY_REQUESTS` | The allowed request rate limit has been exceeded for authentication and registration endpoints (`/auth/**`), protecting the system against abuse or brute-force attacks. | 429 Too Many Requests |
 | `ERR_INTERNAL_SERVER_ERROR` | Final safety net to capture unexpected system exceptions (connectivity drops, null pointers, or unforeseen infrastructure failures). Full traceability remains hidden behind the `trackingId`. | 500 Internal Server Error |
 
 ## 4. Testing

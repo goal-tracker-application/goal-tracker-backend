@@ -8,8 +8,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.utility.DockerImageName;
 
 
 /**
@@ -25,9 +27,14 @@ public abstract class AbstractIntegrationTest {
             .withUsername("postgres")
             .withPassword("postgres");
 
-    
+    @SuppressWarnings("resource")
+    @Container
+    protected static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:alpine"))
+            .withExposedPorts(6379);
+
     static {
         postgres.start();
+        redis.start();
     }
     
     @DynamicPropertySource
@@ -36,6 +43,9 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
+
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
     @Autowired
     protected EntityManager entityManager;

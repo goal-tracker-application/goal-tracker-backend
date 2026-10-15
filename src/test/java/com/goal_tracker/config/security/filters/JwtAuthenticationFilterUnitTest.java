@@ -1,4 +1,4 @@
-package com.goal_tracker.config.security;
+package com.goal_tracker.config.security.filters;
 
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.AfterEach;
@@ -14,6 +14,9 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import com.goal_tracker.config.security.details.UserPrincipal;
+import com.goal_tracker.config.security.provider.JwtProvider;
 
 import java.io.IOException;
 

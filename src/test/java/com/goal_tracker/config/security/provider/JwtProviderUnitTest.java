@@ -1,4 +1,4 @@
-package com.goal_tracker.config.security;
+package com.goal_tracker.config.security.provider;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
