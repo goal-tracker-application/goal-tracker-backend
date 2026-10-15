@@ -48,6 +48,8 @@ export interface ErrorResponse {
 | :--- | :--- | :--- |
 | `ERR_VALIDATION_FAILED` | Fallos de validación de entrada (`@Valid` en DTOs o violaciones de restricciones). Incluye mensajes detallados explicativos por campo. | 400 Bad Request |
 | `ERR_TYPE_MISMATCH` | Parámetros de URL/Query mal formados o fallas estipuladas de coerción de tipos en parámetros (ej., enviar texto donde se espera un ID numérico). | 400 Bad Request |
+| `ERR_PASSWORD_MISMATCH` | La contraseña proporcionada no coincide con su confirmación en las solicitudes de registro o actualización de contraseña. | 400 Bad Request |
+| `INVALID_CURRENT_PASSWORD` | La contraseña actual proporcionada es incorrecta para una solicitud de actualización de contraseña. | 400 Bad Request |
 | `ERR_UNAUTHORIZED` | La petición carece de credenciales de autenticación válidas, el token ha expirado o los datos de acceso proporcionados son incorrectos. | 401 Unauthorized |
 | `ERR_FORBIDDEN` | El usuario autenticado intenta acceder a un recurso o realizar una acción para la cual carece de permisos suficientes. | 403 Forbidden |
 | `ERR_NOT_FOUND` | El recurso solicitado no existe en la base de datos o no se encuentra activo en el sistema. | 404 Not Found |
@@ -81,7 +83,9 @@ La aplicación se configura mediante propiedades en el archivo de configuración
 - **Ruta Base (Context Path):** Todos los endpoints de la API se exponen bajo el prefijo `/api`.
 - **Perfiles:** Se pueden activar perfiles específicos como `dev` (que habilita logs detallados de SQL y consultas en Hibernate para debugging) o `prod`.
 
-## 4. Actuator para la indicación de salud de la base de datos
+## 4. Puntos de acceso
+
+### Actuator para la indicación de salud de la base de datos (Publico)
 
 Se puede acceder al siguiente endpoint para verificar la salud del sistema, específicamente la conexión de la base de datos:
 
@@ -100,6 +104,93 @@ Se puede acceder al siguiente endpoint para verificar la salud del sistema, espe
         * `application`: Nombre de la aplicación.
         * `database`: Estado de la conexión a la base de datos, puede ser `UP` o `DOWN`.
         * `timestamp`: Marca de tiempo actual en formato `yyyy-mm-ddTHH:MM:SS`.
+
+### Autenticacion (Publico)
+
+* **POST** `/auth/register` - Valida los datos de registro, crea una cuenta de usuario regular y devuelve un JWT de acceso.
+    - **Request Payload Example:**
+    ```json
+    {
+        "email": "test@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!"
+    }
+    ```
+    - **Request Attribute Details:**
+        * `email`: Correo electrónico del usuario (debe ser válido y único).
+        * `password`: Contraseña de la cuenta (debe cumplir con las políticas de seguridad: de 10 a 72 caracteres, al menos una letra mayúscula, un número y un carácter especial).
+        * `confirmPassword`: Confirmación de la contraseña (debe coincidir exactamente con `password`).
+
+    - **Response Payload Example:**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsIn...",
+        "email": "test@example.com",
+        "isGuest": false
+    }
+    ```
+    - **Response Attribute Details:**
+        * `token`: Token JWT de acceso firmado.
+        * `email`: Correo electrónico del usuario registrado.
+        * `isGuest`: Indicador de si el usuario es invitado (`false` para usuarios regulares).
+
+* **POST** `/auth/login` - Autentica a un usuario mediante su correo electrónico y contraseña, devolviendo un token JWT de acceso.
+    - **Request Payload Example:**
+    ```json
+    {
+        "email": "test@example.com",
+        "password": "SecurePassword123!"
+    }
+    ```
+    - **Request Attribute Details:**
+        * `email`: Correo electrónico registrado del usuario.
+        * `password`: Contraseña actual del usuario.
+
+    - **Response Payload Example:**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsIn...",
+        "email": "test@example.com",
+        "isGuest": false
+    }
+    ```
+    - **Response Attribute Details:**
+        * `token`: Token JWT de acceso firmado.
+        * `email`: Correo electrónico del usuario.
+        * `isGuest`: Indicador de si el usuario es invitado.
+
+* **POST** `/auth/guest` - Aprovisiona una cuenta temporal de usuario invitado y devuelve un JWT de acceso.
+    - Este endpoint no requiere un cuerpo de solicitud 
+
+    - **Response Payload Example:**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsIn...",
+        "email": "guest_uuid@goaltracker.local",
+        "isGuest": true
+    }
+    ```
+    - **Response Attribute Details:**
+        * `token`: Token JWT de acceso temporal para la sesión de invitado.
+        * `email`: Dirección de correo electrónico temporal generada automáticamente.
+        * `isGuest`: Indicador de si el usuario es invitado (`true` para sesiones de invitado).
+
+
+* **PATCH** `/auth/password` - Permite a un usuario autenticado cambiar su contraseña validando la actual. Devuelve una respuesta HTTP 204 No Content sin cuerpo en caso de éxito.
+    - **Request Payload Example:**
+    ```json
+    {
+        "currentPassword": "CurrentPass123!",
+        "newPassword": "NewSecurePass123!",
+        "confirmNewPassword": "NewSecurePass123!"
+    }
+    ```
+    - **Request Attribute Details:**
+        * `currentPassword`: Contraseña actual del usuario para verificación de seguridad.
+        * `newPassword`: Nueva contraseña que desea establecer (sujeta a las políticas de complejidad de seguridad: de 10 a 72 caracteres, mayúscula, número y carácter especial).
+        * `confirmNewPassword`: Confirmación de la nueva contraseña (debe coincidir con `newPassword`).
+
+    - No se retorna ningún payload en el cuerpo tras una actualización exitosa de contraseña.
 
 ## 5. Pruebas
 
