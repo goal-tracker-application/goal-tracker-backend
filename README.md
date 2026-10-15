@@ -4,60 +4,15 @@
 
 RESTful API backend service for Goal Tracker built with Spring Boot, PostgreSQL, and Flyway. Handles user authentication (JWT), secure account management, version-controlled database migrations, cascading recursive goal trees, and automated maintenance tasks.
 
-## 1. Error Handling
+## 1. Configuration and Environment Variables
 
-The API implements a global exception interceptor `GlobalExceptionHandler` that unifies all failed responses under a strict semantic contract based on a domain enum `ErrorCode`, preventing the leakage of internal server stack traces.
+The application is configured through property files and relies heavily on environment variables to ensure security and flexibility across different environments:
 
-### General Error Structure (ErrorResponse)
-
-All API error responses are standardized under the `ErrorResponse` Data Transfer Object. Upon any failure, the system automatically generates a unique tracking identifier `trackingId` based on a UUID v4 prefixed with ERR-. This identifier is replicated across audit logs and server logs to allow rapid traceability and operational support.
-
-#### JSON Example
-
-``` json
-{
-  "code": "ERR_VALIDATION_FAILED",
-  "message": "The submitted data does not meet the required validations.",
-  "details": [
-    "The field 'title' cannot be blank.",
-    "The target value must be greater than 0."
-  ],
-  "trackingId": "ERR-7c9b1a2d-4e8f-4b3c-9a1d-5e6f7a8b9c0d"
-}
-```
-
-#### TypeScript Definition
-
-For frontend integration (e.g., in TypeScript/React or Angular clients), the error response contract is modeled as follows:
-
-``` typescript
-export interface ErrorResponse {
-  code: string;
-  message: string;
-  details?: string[];
-  trackingId: string;
-}
-```
-
-> **Serialization Behavior:**  
-> The `details` property is included as an array of explanatory strings or field validation specifications. If there is no supplementary information regarding the failure, the `details` key is automatically omitted from the JSON body sent to the client.
-
-### Available Error Codes
-
-| Static Code | Description / Root Cause | HTTP Status |
-| :--- | :--- | :--- |
-| `ERR_VALIDATION_FAILED` | Input validation failures (`@Valid` on DTOs or constraints violations). Includes detailed explanatory messages per field. | 400 Bad Request |
-| `ERR_TYPE_MISMATCH` | Malformed URL/Query parameters or strict type coercion failures in parameters (e.g., sending text where a numeric ID is expected). | 400 Bad Request |
-| `ERR_PASSWORD_MISMATCH` | The provided password do not match it's confirmation on register or update password requests. | 400 Bad Request |
-| `INVALID_CURRENT_PASSWORD` | The provided current password is incorrect for an update password request. | 400 Bad Request |
-| `ERR_UNAUTHORIZED` | The request lacks valid authentication credentials, the token has expired, or the provided access data is incorrect. | 401 Unauthorized |
-| `ERR_FORBIDDEN` | The authenticated user attempts to access a resource or perform an action for which they lack sufficient permissions. | 403 Forbidden |
-| `ERR_NOT_FOUND` | The requested resource does not exist in the database or is not active in the system. | 404 Not Found |
-| `ERR_EMAIL_ALREADY_EXISTS` | Occurs when attempting to register a user with an email address that is already occupied by another account. | 409 Conflict |
-| `ERR_DUPLICATE_GOAL_LOG` | Occurs when attempting to create a progress entry (check-in) for a goal on a date that already has an existing entry. | 409 Conflict |
-| `ERR_INVALID_GOAL_HIERARCHY` | Occurs when the goal hierarchy is invalid (e.g., a goal cannot be its own parent or generate circular dependencies). | 409 Conflict |
-| `ERR_GOAL_DATE_RANGE_INVALID` | Occurs when the start date is later than the end date for a goal. | 422 Unprocessable Entity |
-| `ERR_INTERNAL_SERVER_ERROR` | Final safety net to capture unexpected system exceptions (connectivity drops, null pointers, or unforeseen infrastructure failures). Full traceability remains hidden behind the `trackingId`. | 500 Internal Server Error |
+- **Database (PostgreSQL):** Uses `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. Its schema policy is set to `validate` (relying on **Flyway** for migrations located in `classpath:db/migration`).
+- **Security & JWT:** The secret key for token signing and expiration time are configured via `APP_SECURITY_JWT_SECRET` and `APP_SECURITY_JWT_EXPIRATION_MS` (with a secure fallback default for local testing).
+- **CORS:** Allowed origins for external client requests are managed using `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
+- **Context Path:** All API endpoints are exposed under the `/api` prefix.
+- **Profiles:** Specific profiles can be activated, such as `dev` (which enables detailed Hibernate SQL and query binding logs for debugging) or `prod`.
 
 ## 2. Security
 
@@ -73,17 +28,7 @@ Stateless authentication is implemented using JWT. Once a user successfully logs
 
 CORS is configured globally to allow authorized clients (such as frontend applications) to communicate securely with the API endpoints.
 
-## 3. Configuration and Environment Variables
-
-The application is configured through property files and relies heavily on environment variables to ensure security and flexibility across different environments:
-
-- **Database (PostgreSQL):** Uses `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD`. Its schema policy is set to `validate` (relying on **Flyway** for migrations located in `classpath:db/migration`).
-- **Security & JWT:** The secret key for token signing and expiration time are configured via `APP_SECURITY_JWT_SECRET` and `APP_SECURITY_JWT_EXPIRATION_MS` (with a secure fallback default for local testing).
-- **CORS:** Allowed origins for external client requests are managed using `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
-- **Context Path:** All API endpoints are exposed under the `/api` prefix.
-- **Profiles:** Specific profiles can be activated, such as `dev` (which enables detailed Hibernate SQL and query binding logs for debugging) or `prod`.
-
-## 4. Endpoints
+## 3. Endpoints
 
 ### Actuator for Database Health Indication (Public)
 
@@ -195,7 +140,54 @@ The following endpoint can be accessed to check the health of the system, specif
 
     - No payload is returned in the body after a successful password update.
 
-## 5. Testing
+### Error Handling
+
+The API implements a global exception interceptor `GlobalExceptionHandler` that unifies all failed responses under a strict semantic contract based on a domain enum `ErrorCode`, preventing the leakage of internal server stack traces.
+
+#### General Error Structure (ErrorResponse)
+
+All API error responses are standardized under the `ErrorResponse` Data Transfer Object. Upon any failure, the system automatically generates a unique tracking identifier `trackingId` based on a UUID v4 prefixed with ERR-. This identifier is replicated across audit logs and server logs to allow rapid traceability and operational support.
+
+- **JSON Example**
+
+``` json
+{
+  "code": "ERR_VALIDATION_FAILED",
+  "message": "The submitted data does not meet the required validations.",
+  "details": [
+    "The field 'title' cannot be blank.",
+    "The target value must be greater than 0."
+  ],
+  "trackingId": "ERR-7c9b1a2d-4e8f-4b3c-9a1d-5e6f7a8b9c0d"
+}
+```
+- **Attribute details:**
+    * code : A machine-readable string identifier representing the specific type or category of error, used by client applications to handle errors programmatically.
+    * message: A human-readable, user-friendly summary describing what went wrong in plain language.
+    * details: An array of specific error messages providing granular information about individual field validation failures or constraint violations (it's an optional field, if there are no details the JSON does not include the field).
+    * trackingId: A unique identifier (UUID) assigned to the specific error occurrence, used for logging, debugging, and tracing the error in server logs.
+
+> **Serialization Behavior:**  
+> The `details` property is included as an array of explanatory strings or field validation specifications. If there is no supplementary information regarding the failure, the `details` key is automatically omitted from the JSON body sent to the client.
+
+#### Available Error Codes
+
+| Static Code | Description / Root Cause | HTTP Status |
+| :--- | :--- | :--- |
+| `ERR_VALIDATION_FAILED` | Input validation failures (`@Valid` on DTOs or constraints violations). Includes detailed explanatory messages per field. | 400 Bad Request |
+| `ERR_TYPE_MISMATCH` | Malformed URL/Query parameters or strict type coercion failures in parameters (e.g., sending text where a numeric ID is expected). | 400 Bad Request |
+| `ERR_PASSWORD_MISMATCH` | The provided password do not match it's confirmation on register or update password requests. | 400 Bad Request |
+| `INVALID_CURRENT_PASSWORD` | The provided current password is incorrect for an update password request. | 400 Bad Request |
+| `ERR_UNAUTHORIZED` | The request lacks valid authentication credentials, the token has expired, or the provided access data is incorrect. | 401 Unauthorized |
+| `ERR_FORBIDDEN` | The authenticated user attempts to access a resource or perform an action for which they lack sufficient permissions. | 403 Forbidden |
+| `ERR_NOT_FOUND` | The requested resource does not exist in the database or is not active in the system. | 404 Not Found |
+| `ERR_EMAIL_ALREADY_EXISTS` | Occurs when attempting to register a user with an email address that is already occupied by another account. | 409 Conflict |
+| `ERR_DUPLICATE_GOAL_LOG` | Occurs when attempting to create a progress entry (check-in) for a goal on a date that already has an existing entry. | 409 Conflict |
+| `ERR_INVALID_GOAL_HIERARCHY` | Occurs when the goal hierarchy is invalid (e.g., a goal cannot be its own parent or generate circular dependencies). | 409 Conflict |
+| `ERR_GOAL_DATE_RANGE_INVALID` | Occurs when the start date is later than the end date for a goal. | 422 Unprocessable Entity |
+| `ERR_INTERNAL_SERVER_ERROR` | Final safety net to capture unexpected system exceptions (connectivity drops, null pointers, or unforeseen infrastructure failures). Full traceability remains hidden behind the `trackingId`. | 500 Internal Server Error |
+
+## 4. Testing
 
 ### Configuring Testcontainers
 
