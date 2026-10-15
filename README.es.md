@@ -40,7 +40,7 @@ export interface ErrorResponse {
 ```
 
 > **Comportamiento de Serialización:**  
-> La propiedad `details` se incluye como un arreglo de cadenas explicativas o especificaciones de validación por campo. Si no existe información complementaria sobre el fallo, la clave `details` se omite automáticamente del cuerpo JSON enviado al cliente gracias a la regla de serialización `@JsonInclude(JsonInclude.Include.NON_EMPTY)`.
+> La propiedad `details` se incluye como un arreglo de cadenas explicativas o especificaciones de validación por campo. Si no existe información complementaria sobre el fallo, la clave `details` se omite automáticamente del cuerpo JSON enviado al cliente.
 
 ### Códigos de Error Disponibles
 
