@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.goal_tracker.config.security.JwtProvider;
 import com.goal_tracker.config.security.UserPrincipal;
+import com.goal_tracker.config.security.provider.JwtProvider;
 
 import java.io.IOException;
 import java.util.Collections;

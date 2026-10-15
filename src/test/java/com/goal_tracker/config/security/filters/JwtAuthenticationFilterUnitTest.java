@@ -15,8 +15,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import com.goal_tracker.config.security.JwtProvider;
 import com.goal_tracker.config.security.UserPrincipal;
+import com.goal_tracker.config.security.provider.JwtProvider;
 
 import java.io.IOException;
 
