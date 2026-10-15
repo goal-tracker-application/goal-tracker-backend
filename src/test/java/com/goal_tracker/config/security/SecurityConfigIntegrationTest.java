@@ -5,6 +5,7 @@ import com.goal_tracker.AbstractIntegrationTest;
 import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
+import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;
 

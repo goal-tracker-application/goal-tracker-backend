@@ -7,7 +7,7 @@ import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.exceptions.EmailAreadyInUseException;
 import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
-import com.goal_tracker.config.security.UserPrincipal;
+import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.config.security.provider.JwtProvider;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;

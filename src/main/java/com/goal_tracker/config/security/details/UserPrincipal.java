@@ -1,4 +1,4 @@
-package com.goal_tracker.config.security;
+package com.goal_tracker.config.security.details;
 
 /**
  * Data structure representing the authenticated user principal stored within the SecurityContext.
