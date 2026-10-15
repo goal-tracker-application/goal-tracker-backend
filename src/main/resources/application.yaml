@@ -19,6 +19,10 @@ app:
       expiration-ms: ${APP_SECURITY_JWT_EXPIRATION_MS:7200000}
     cors:
       allowed-origins: ${APP_SECURITY_CORS_ALLOWED_ORIGINS:http://localhost:3000,https://localhost:5173}
+    rate-limit:
+      capacity: ${APP_SECURITY_RATE_LIMIT_CAPACITY:5}
+      refill-tokens: ${APP_SECURITY_RATE_LIMIT_REFILL_TOKENS:5}
+      refill-duration-minutes: ${APP_SECURITY_RATE_LIMIT_REFILL_DURATION_MINUTES:1}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
