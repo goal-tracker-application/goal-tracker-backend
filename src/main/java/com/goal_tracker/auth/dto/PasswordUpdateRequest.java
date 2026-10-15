@@ -1,5 +1,7 @@
 package com.goal_tracker.auth.dto;
 
+import com.goal_tracker.auth.validation.ValidPassword;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -16,6 +18,7 @@ public record PasswordUpdateRequest(
 
     @NotBlank(message = "New password is required")
     @Size(min = 8, max = 72, message = "New password must be between 8 and 72 characters")
+    @ValidPassword
     String newPassword,
 
     @NotBlank(message = "Password confirmation is required")
