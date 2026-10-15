@@ -9,6 +9,7 @@ Servicio de API REST backend para Goal Tracker construido con Spring Boot, Postg
 La aplicación se configura mediante propiedades en el archivo de configuración y se alimenta principalmente de variables de entorno para garantizar la seguridad y flexibilidad en distintos entornos:
 
 - **Base de Datos (PostgreSQL):** Utiliza `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` y `SPRING_DATASOURCE_PASSWORD`. Su política de esquema está configurada en `validate` (confiando en **Flyway** para las migraciones en `classpath:db/migration`).
+- **Redis (Caché y Rate Limiting):** Configurado a través de `REDIS_HOST` y `REDIS_PORT` para establecer la conexión para la persistencia de estados (utilizando por defecto `localhost` y `6379` para entornos locales).
 - **Seguridad y JWT:** El secreto para la firma de los tokens y su tiempo de expiración se configuran a través de `APP_SECURITY_JWT_SECRET` y `APP_SECURITY_JWT_EXPIRATION_MS` (con un valor por defecto seguro para pruebas locales).
 - **Rate Limiting (Protección IP):** Se gestiona bajo el prefijo `app.security.rate-limit` y permite configurar la capacidad máxima, la tasa de recarga y su periodicidad mediante variables de entorno:
   - `APP_SECURITY_RATE_LIMIT_CAPACITY` (por defecto: `5` tokens).
