@@ -53,6 +53,9 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    /**
+     * Password encoder component.
+     */
     @Autowired
     private PasswordEncoder passwordEncoder;
     /**
