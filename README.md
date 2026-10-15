@@ -40,7 +40,7 @@ export interface ErrorResponse {
 ```
 
 > **Serialization Behavior:**  
-> The `details` property is included as an array of explanatory strings or field validation specifications. If there is no supplementary information regarding the failure, the `details` key is automatically omitted from the JSON body sent to the client thanks to the serialization rule `@JsonInclude(JsonInclude.Include.NON_EMPTY)`.
+> The `details` property is included as an array of explanatory strings or field validation specifications. If there is no supplementary information regarding the failure, the `details` key is automatically omitted from the JSON body sent to the client.
 
 ### Available Error Codes
 
