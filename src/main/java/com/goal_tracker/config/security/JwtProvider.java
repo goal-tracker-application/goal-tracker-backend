@@ -40,15 +40,15 @@ public class JwtProvider {
      * Generates a new JWT token embedding the username (Subject) and user ID.
      *
      * @param userId   Unique identifier of the user in the database.
-     * @param username Username of the authenticated subject.
+     * @param email Email of the authenticated subject.
      * @return String representing the signed JWT.
      */
-    public String generateToken(Long userId, String username) {
+    public String generateToken(Long userId, String email) {
         Date now = new Date();
         Date expirationDate = new Date(now.getTime() + expirationMs);
 
         return Jwts.builder()
-                .subject(username)
+                .subject(email)
                 .claim("user_id", userId)
                 .issuedAt(now)
                 .expiration(expirationDate)

@@ -48,6 +48,8 @@ export interface ErrorResponse {
 | :--- | :--- | :--- |
 | `ERR_VALIDATION_FAILED` | Input validation failures (`@Valid` on DTOs or constraints violations). Includes detailed explanatory messages per field. | 400 Bad Request |
 | `ERR_TYPE_MISMATCH` | Malformed URL/Query parameters or strict type coercion failures in parameters (e.g., sending text where a numeric ID is expected). | 400 Bad Request |
+| `ERR_PASSWORD_MISMATCH` | The provided password do not match it's confirmation on register or update password requests. | 400 Bad Request |
+| `INVALID_CURRENT_PASSWORD` | The provided current password is incorrect for an update password request. | 400 Bad Request |
 | `ERR_UNAUTHORIZED` | The request lacks valid authentication credentials, the token has expired, or the provided access data is incorrect. | 401 Unauthorized |
 | `ERR_FORBIDDEN` | The authenticated user attempts to access a resource or perform an action for which they lack sufficient permissions. | 403 Forbidden |
 | `ERR_NOT_FOUND` | The requested resource does not exist in the database or is not active in the system. | 404 Not Found |
@@ -81,12 +83,15 @@ The application is configured through property files and relies heavily on envir
 - **Context Path:** All API endpoints are exposed under the `/api` prefix.
 - **Profiles:** Specific profiles can be activated, such as `dev` (which enables detailed Hibernate SQL and query binding logs for debugging) or `prod`.
 
-## 4. Actuator for Database Health Indication
+## 4. Endpoints
+
+### Actuator for Database Health Indication (Public)
 
 The following endpoint can be accessed to check the health of the system, specifically the database connection:
 
 * **GET** `/actuator/health/` - It checks the status of the database connection and returns the following formatted JSON response:
 
+    - **JSON Example:**
     ``` json
     {
         "application": "Goal Tracker API",
@@ -100,6 +105,95 @@ The following endpoint can be accessed to check the health of the system, specif
         * `application`: Name of the application.
         * `database`: Database connection status, can be `UP` or `DOWN`.
         * `timestamp`: Current timestamp in `yyyy-mm-ddTHH:MM:SS` format.
+
+### Authentication (Public)
+
+* **POST** `/auth/register` - Validates registration data, creates a regular user account, and returns an access JWT.
+    - **Request Payload Example:**
+    ```json
+    {
+        "email": "test@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!"
+    }
+    ```
+    - **Request Attribute Details:**
+        * `email`: User's email address (must be valid and unique).
+        * `password`: Account password (must meet security policies: 10-72 characters, at least one uppercase letter, one number, and one special character).
+        * `confirmPassword`: Password confirmation (must match `password` exactly).
+
+    - **Response Payload Example:**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsIn...",
+        "email": "test@example.com",
+        "isGuest": false
+    }
+    ```
+    - **Response Attribute Details:**
+        * `token`: Signed JWT access token.
+        * `email`: Registered user's email address.
+        * `isGuest`: Indicator of whether the user is a guest (`false` for regular users).
+
+* **POST** `/auth/login` - Authenticates a user via email and password, returning a signed JWT access token.
+    - **Request Payload Example:**
+    ```json
+    {
+        "email": "test@example.com",
+        "password": "SecurePassword123!"
+    }
+    ```
+    - **Request Attribute Details:**
+        * `email`: User's registered email address.
+        * `password`: User's current password.
+
+    - **Response Payload Example:**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsIn...",
+        "email": "test@example.com",
+        "isGuest": false
+    }
+    ```
+    - **Response Attribute Details:**
+        * `token`: Signed JWT access token.
+        * `email`: User's email address.
+        * `isGuest`: Indicator of whether the user is a guest.
+
+
+* **POST** `/auth/guest` - Provisions a temporary guest user account and returns an access JWT.
+    
+    - This endpoint does not require a request body.
+
+    - **Response Payload Example:**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsIn...",
+        "email": "guest_uuid@goaltracker.local",
+        "isGuest": true
+    }
+    ```
+    - **Response Attribute Details:**
+        * `token`: Temporary JWT access token for the guest session.
+        * `email`: Automatically generated temporary email address.
+        * `isGuest`: Indicator of whether the user is a guest (`true` for guest sessions).
+
+
+* **PATCH** `/auth/password` - Allows an authenticated user to change their password by validating the current one Returns an HTTP 204 No Content response with an empty body on success
+    - **Request Payload Example:**
+    ```json
+    {
+        "currentPassword": "CurrentPass123!",
+        "newPassword": "NewSecurePass123!",
+        "confirmNewPassword": "NewSecurePass123!"
+    }
+    ```
+    - **Request Attribute Details:**
+        * `currentPassword`: User's current password for security verification.
+        * `newPassword`: New password to set (subject to security complexity policies: 10-72 characters, uppercase, number, and special character).
+        * `confirmNewPassword`: Confirmation of the new password (must match `newPassword`).
+
+    - No payload is returned in the body after a successful password update.
 
 ## 5. Testing
 

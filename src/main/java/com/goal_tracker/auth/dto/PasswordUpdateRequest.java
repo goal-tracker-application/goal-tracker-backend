@@ -1,0 +1,35 @@
+package com.goal_tracker.auth.dto;
+
+import com.goal_tracker.auth.validation.ValidPassword;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+/**
+ * Data Transfer Object (DTO) for updating the user's password.
+ *
+ * @param currentPassword Current password required for identity verification.
+ * @param newPassword     New plain text password (between 8 and 72 characters).
+ * @param confirmPassword Confirmation of the new password for cross-validation.
+ */
+public record PasswordUpdateRequest(
+    @NotBlank(message = "Current password is required")
+    String currentPassword,
+
+    @NotBlank(message = "New password is required")
+    @Size(min = 8, max = 72, message = "New password must be between 8 and 72 characters")
+    @ValidPassword
+    String newPassword,
+
+    @NotBlank(message = "Password confirmation is required")
+    String confirmPassword
+) {
+    /**
+     * Utility method to check if the new passwords match.
+     *
+     * @return {@code true} if both new passwords are identical.
+     */
+    public boolean passwordsMatch() {
+        return newPassword != null && newPassword.equals(confirmPassword);
+    }
+}

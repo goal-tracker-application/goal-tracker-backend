@@ -4,10 +4,12 @@ import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.errors.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -68,6 +70,39 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Catches and processes validation failures at the parameter and loose constraint level (HTTP 400).
+     * Triggered primarily when validation annotations applied directly to controller method arguments fail.
+     *
+     * @param ex the constraint violation exception thrown by direct parameters.
+     * @return a {@link ResponseEntity} containing the {@link ErrorResponse} DTO and HTTP status 400.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        String errorId = generateTrackingId();
+        
+        log.warn("[{}] Constraint violation (ConstraintViolationException) detected in direct parameters:", errorId);
+
+        List<String> errorDetails = ex.getConstraintViolations().stream()
+                .map(violation -> {
+                    String path = violation.getPropertyPath().toString();
+                    String field = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
+                    String defaultMessage = String.format("The field '%s' %s.", field, violation.getMessage());
+                    log.warn("[{}]  -> Violated constraint: {}", errorId, defaultMessage);
+                    return defaultMessage;
+                })
+                .toList();
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                ErrorCode.ERR_VALIDATION_FAILED.name(),
+                ErrorCode.ERR_VALIDATION_FAILED.getDefaultMessage(),
+                errorDetails,
+                errorId
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+    
+    /**
      * Intercepts type mismatches or incompatibilities detected in URL input parameters.
      * Example: Passing an alphanumeric string in a {@code @PathVariable} or {@code @RequestParam} 
      * that expects a numeric type.
@@ -96,6 +131,55 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    /**
+     * Catches and processes JSON parsing or type mismatch errors during request body deserialization (HTTP 400).
+     * Triggered when the incoming payload contains malformed data types or unparseable structures.
+     *
+     * @param ex the HTTP message not readable exception thrown by Spring/Jackson.
+     * @return a {@link ResponseEntity} containing the {@link ErrorResponse} DTO and HTTP status 400.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        String errorId = generateTrackingId();
+        
+        log.warn("[{}] JSON parse error or type mismatch detected: {}", errorId, ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                ErrorCode.ERR_TYPE_MISMATCH.name(),
+                ErrorCode.ERR_TYPE_MISMATCH.getDefaultMessage(),
+                List.of("The request body contains malformed JSON or invalid data types."),
+                errorId
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    /**
+     * Handles exceptions inheriting from {@link BadRequestException}.
+     * <p>
+     * Captures all domain-specific bad request failures and returns a structured response
+     * with an HTTP status 400 (Bad Request).
+     * </p>
+     *
+     * @param ex The captured {@link BadRequestException}.
+     * @return {@link ResponseEntity} containing the {@link ErrorResponse} DTO and HTTP status 400.
+     */
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequestExceptions(BadRequestException ex) {
+        String errorId = generateTrackingId();
+
+        log.warn("[{}] Bad request detected. Error Code: '{}', Detail: '{}'", 
+            errorId, ex.getErrorCode().name(), ex.getMessage());
+    
+        ErrorResponse errorResponse = new ErrorResponse(
+            ex.getErrorCode().name(),
+            ex.getErrorCode().getDefaultMessage(),
+            ex.getMessage(),
+            errorId
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+            
     /**
      * Handles invalid credential exceptions generated during authentication.
      * <p>

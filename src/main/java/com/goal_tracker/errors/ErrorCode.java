@@ -20,6 +20,18 @@ public enum ErrorCode {
     ERR_TYPE_MISMATCH("The data type of one of the request parameters is incorrect."),
 
     /**
+     * HTTP 400 - Bad Request.
+     * Occurs when the provided password does not match its confirmation.
+     */
+    ERR_PASSWORD_MISMATCH("The provided password do not match it's confirmation."),
+    
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when the provided current password for password update is incorrect.
+     */
+    INVALID_CURRENT_PASSWORD("The provided current password is incorrect."),
+
+    /**
      * HTTP 401 - Unauthorized.
      * Occurs when the request lacks valid authentication credentials,
      * the token has expired, or the provided access data is incorrect.
