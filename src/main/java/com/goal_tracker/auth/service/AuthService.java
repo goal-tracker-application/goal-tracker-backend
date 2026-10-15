@@ -132,8 +132,7 @@ public class AuthService {
     @Transactional 
     public void updatePassword(PasswordUpdateRequest request) {
         UserPrincipal userPrincipal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        User user = userRepository.findById(userPrincipal.id())
-                .orElseThrow(() -> new BadCredentialsException("User not found"));
+        User user = userRepository.findById(userPrincipal.id()).get();
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new IncorrectCurrentPasswordException();
