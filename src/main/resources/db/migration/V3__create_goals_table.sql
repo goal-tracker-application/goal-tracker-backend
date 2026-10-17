@@ -15,7 +15,12 @@ CREATE TABLE IF NOT EXISTS goals (
     CONSTRAINT fk_goals_parent FOREIGN KEY (parent_id) 
         REFERENCES goals (id) ON DELETE CASCADE,
     CONSTRAINT fk_goals_status FOREIGN KEY (status_id) 
-        REFERENCES goal_statuses (id)
+        REFERENCES goal_statuses (id),
+    CONSTRAINT chk_goals_date_range CHECK (
+        (start_date IS NOT NULL OR end_date IS NULL) 
+        AND 
+        (end_date >= start_date)
+    )
 );
 
 CREATE INDEX IF NOT EXISTS idx_goals_user_id ON goals (user_id);
