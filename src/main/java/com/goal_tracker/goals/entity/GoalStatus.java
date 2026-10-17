@@ -20,13 +20,13 @@ import org.hibernate.annotations.Immutable;
 public class GoalStatus {
 
     /**
-     * Unique numerical identifier for the goal state (1: IN_PROGRESS, 2: COMPLETED, 3: ARCHIVED).
+     * Unique numerical identifier for the goal state (1: WAITING, 2: IN_PROGRESS, 3: PAUSED, 4: COMPLETED, 5: FAILED, 6: DISCARDED).
      */
     @Id
     private Integer id;
 
     /**
-     * Unique name of the goal state (e.g., 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED').
+     * Unique name of the goal state (e.g., 'WAITING', 'IN_PROGRESS', 'PAUSED', 'COMPLETED', 'FAILED', 'DISCARDED').
      */
     @Column(nullable = false, unique = true, length = 50)
     private String name;
