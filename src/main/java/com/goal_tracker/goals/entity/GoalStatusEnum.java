@@ -11,19 +11,34 @@ package com.goal_tracker.goals.entity;
 public enum GoalStatusEnum {
 
     /**
-     * The goal is active and under development.
+     * The goal is created or scheduled and awaiting activation.
      */
-    IN_PROGRESS(1),
+    WAITING(1),
 
     /**
-     * The goal was fulfilled and successfully completed.
+     * The goal is actively being pursued within its execution timeframe.
      */
-    COMPLETED(2),
+    IN_PROGRESS(2),
 
     /**
-     * The goal was archived to preserve history without affecting the active dashboard.
+     * The goal execution is temporarily frozen; time elapsed is deferred upon unpausing.
      */
-    ARCHIVED(3);
+    PAUSED(3),
+
+    /**
+     * The goal objective was successfully achieved.
+     */
+    COMPLETED(4),
+
+    /**
+     * The goal was missed or expired past its end date without completion.
+     */
+    FAILED(5),
+
+    /**
+     * The goal was dropped or cancelled without being marked as a failure.
+     */
+    DISCARDED(6);
 
     /**
      * The internal numerical identifier stored in the database column.
