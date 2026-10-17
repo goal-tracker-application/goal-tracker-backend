@@ -70,7 +70,7 @@ public class User {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
-        /**
+    /**
      * Default no-arg constructor required by JPA.
      * Explicitly defined to prevent bytecode corruption issues with annotation processors.
      */
@@ -78,10 +78,58 @@ public class User {
         super();
     }
 
+    /**
+     * Parameterized constructor for application usage or testing.
+     *
+     * @param email       The email address of the user.
+     * @param passwordHash The hashed password of the user.
+     * @param isGuest     Indicates whether the user is a guest.
+     * @param expiresAt   The expiration date and time for guest users.
+     */
     public User(String email, String passwordHash, Boolean isGuest, OffsetDateTime expiresAt) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.isGuest = isGuest;
         this.expiresAt = expiresAt;
+    }
+
+    /**
+     * Test constructor with ID and createdAt (unmodified user simulation).
+     *
+     * @param id          The unique identifier.
+     * @param email       The email address of the user.
+     * @param passwordHash The hashed password of the user.
+     * @param isGuest     Indicates whether the user is a guest.
+     * @param expiresAt   The expiration date and time for guest users.
+     * @param createdAt   The creation timestamp.
+     */
+    public User(Long id, String email, String passwordHash, Boolean isGuest, OffsetDateTime expiresAt, OffsetDateTime createdAt) {
+        this.id = id;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.isGuest = isGuest;
+        this.expiresAt = expiresAt;
+        this.createdAt = createdAt;
+    }
+
+    /**
+     * Full test constructor with ID, createdAt and updatedAt (modified user simulation).
+     *
+     * @param id          The unique identifier.
+     * @param email       The email address of the user.
+     * @param passwordHash The hashed password of the user.
+     * @param isGuest     Indicates whether the user is a guest.
+     * @param expiresAt   The expiration date and time for guest users.
+     * @param createdAt   The creation timestamp.
+     * @param updatedAt   The last update timestamp.
+     */
+    public User(Long id, String email, String passwordHash, Boolean isGuest, OffsetDateTime expiresAt, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+        this.id = id;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.isGuest = isGuest;
+        this.expiresAt = expiresAt;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 }
