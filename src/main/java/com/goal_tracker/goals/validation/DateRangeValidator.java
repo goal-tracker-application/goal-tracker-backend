@@ -1,34 +1,33 @@
 package com.goal_tracker.goals.validation;
 
-import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
 import java.time.LocalDate;
 
 /**
- * Validator implementation for the {@link ValidDateRange} constraint applied to {@link GoalCreateRequestDto}.
- * <p>
- * Enforces business domain rules and database constraints for date boundaries:
- * <ul>
- *   <li>The planned start date cannot be set in the past.</li>
- *   <li>A planned end date requires an accompanying start date (mirrors the DB {@code CHECK} constraint).</li>
- *   <li>The end date must be equal to or greater than the start date.</li>
- * </ul>
- * </p>
+ * Validator implementation for the {@link ValidDateRange} constraint applied to any {@link DateRangeAware} object.
  */
-public class DateRangeValidator implements ConstraintValidator<ValidDateRange, GoalCreateRequestDto> {
+public class DateRangeValidator implements ConstraintValidator<ValidDateRange, DateRangeAware> {
 
     /**
-     * Evaluates whether the date range provided in the {@link GoalCreateRequestDto} complies
+     * Evaluates whether the date range provided in the {@link DateRangeAware} object complies
      * with domain validation constraints.
+     * <p>
+     * Validation checks include:
+     * <ul>
+     *   <li>Ensuring the start date is not set in the past relative to today.</li>
+     *   <li>Ensuring an end date cannot exist without a corresponding start date.</li>
+     *   <li>Ensuring the end date is equal to or after the start date.</li>
+     * </ul>
+     * </p>
      *
-     * @param dto     The goal creation DTO being validated.
+     * @param dto     The date range aware object being validated.
      * @param context The context in which the constraint is evaluated.
-     * @return {@code true} if the date criteria are satisfied or if the DTO is null; {@code false} otherwise.
+     * @return {@code true} if the date criteria are satisfied or if the object is null; {@code false} otherwise.
      */
     @Override
-    public boolean isValid(GoalCreateRequestDto dto, ConstraintValidatorContext context) {
+    public boolean isValid(DateRangeAware dto, ConstraintValidatorContext context) {
         if (dto == null) {
             return true;
         }
