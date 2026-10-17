@@ -74,10 +74,10 @@ public class Goal {
     private LocalDate endDate;
 
     /**
-     * Business enum status of the goal.
+     * Business enum status of the goal. Defaults to WAITING (1).
      */
     @Column(name = "status_id", nullable = false)
-    private GoalStatusEnum status = GoalStatusEnum.IN_PROGRESS;
+    private GoalStatusEnum status = GoalStatusEnum.WAITING;
 
     /**
      * Read-only master entity relationship for the goal status.
@@ -102,14 +102,13 @@ public class Goal {
 
     /**
      * Default no-arg constructor required by JPA.
-     * Explicitly defined to prevent bytecode corruption issues with annotation processors.
      */
     public Goal() {
         super();
     }
 
     /**
-     * All-args constructor for convenient instantiation.
+     * Standard constructor for application usage.
      */
     public Goal(Long userId, Goal parent, String title, String description, LocalDate startDate, LocalDate endDate, GoalStatusEnum status) {
         super();
@@ -122,5 +121,40 @@ public class Goal {
         if (status != null) {
             this.status = status;
         }
+    }
+
+    /**
+     * Test constructor with ID and createdAt (unmodified goal simulation).
+     */
+    public Goal(Long id, Long userId, Goal parent, String title, String description, LocalDate startDate, LocalDate endDate, GoalStatusEnum status, OffsetDateTime createdAt) {
+        this.id = id;
+        this.userId = userId;
+        this.parent = parent;
+        this.title = title;
+        this.description = description;
+        this.startDate = startDate;
+        this.endDate = endDate;
+        if (status != null) {
+            this.status = status;
+        }
+        this.createdAt = createdAt;
+    }
+
+    /**
+     * Full test constructor with ID, createdAt and updatedAt (modified goal simulation).
+     */
+    public Goal(Long id, Long userId, Goal parent, String title, String description, LocalDate startDate, LocalDate endDate, GoalStatusEnum status, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+        this.id = id;
+        this.userId = userId;
+        this.parent = parent;
+        this.title = title;
+        this.description = description;
+        this.startDate = startDate;
+        this.endDate = endDate;
+        if (status != null) {
+            this.status = status;
+        }
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 }
