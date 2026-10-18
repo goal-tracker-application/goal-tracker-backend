@@ -32,6 +32,18 @@ public enum ErrorCode {
     INVALID_CURRENT_PASSWORD("The provided current password is incorrect."),
 
     /**
+     * HTTP 400 - Bad Request.
+     * Occurs when a subgoal's start date is earlier than its ancestor's start date.
+     */
+    ERR_GOAL_START_DATE_VIOLATION("The subgoal's start date cannot be earlier than its ancestor's start date."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when a subgoal's end date is later than its ancestor's end date.
+     */
+    ERR_GOAL_END_DATE_VIOLATION("The subgoal's end date cannot be later than its ancestor's end date."),
+    
+    /**
      * HTTP 401 - Unauthorized.
      * Occurs when the request lacks valid authentication credentials,
      * the token has expired, or the provided access data is incorrect.
@@ -65,19 +77,6 @@ public enum ErrorCode {
      * on a date that already has an existing entry.
      */
     ERR_DUPLICATE_GOAL_LOG("A progress entry (check-in) for this goal already exists on the specified date."),
-
-    /**
-     * HTTP 409 - Conflict.
-     * Occurs when the goal hierarchy is invalid 
-     * (e.g., a goal cannot be its own parent or cause circular dependencies).
-     */
-    ERR_INVALID_GOAL_HIERARCHY("The goal hierarchy is invalid (a goal cannot be its own parent or generate circular dependencies)."),
-
-    /**
-     * HTTP 422 - Unprocessable Entity.
-     * Occurs when the start date is later than the end date for a goal.
-     */
-    ERR_GOAL_DATE_RANGE_INVALID("The start date cannot be later than the end date of the goal."),
 
     /**
      * HTTP 429 - Too Many Requests.
