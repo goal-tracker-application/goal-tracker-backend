@@ -33,7 +33,7 @@ public class GoalStatusHistory {
     /**
      * Business enum status of the goal transition.
      */
-    @Column(name = "status_id", nullable = false)
+    @Column(name = "status_id", nullable = false, columnDefinition = "goal_status_type")
     private GoalStatusEnum status;
 
     /**
