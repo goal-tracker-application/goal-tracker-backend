@@ -1,10 +1,10 @@
 spring:
   datasource:
-    url: jdbc:tc:postgresql:16-alpine:///goal_tracker_test
+    url: jdbc:tc:postgresql:17.9-bookworm:///goal_tracker_test
     driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate
     show-sql: true
   flyway:
     enabled: true
