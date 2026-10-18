@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 /**
  * Immutable record DTO representing a flat, detailed view of a goal for API responses,
@@ -57,11 +57,11 @@ public record GoalResponseDto(
      * Timestamp indicating when the goal was created. Used for UI/auditing.
      */
     @NotNull(message = "Creation timestamp is required.")
-    LocalDateTime createdAt,
+    OffsetDateTime createdAt,
 
     /**
      * Timestamp indicating when the goal was last updated. Used for UI/auditing.
      */
-    LocalDateTime updatedAt
+    OffsetDateTime updatedAt
 
 ) {}
