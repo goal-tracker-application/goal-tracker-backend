@@ -76,7 +76,7 @@ public class Goal {
     /**
      * Business enum status of the goal. Defaults to WAITING (1).
      */
-    @Column(name = "status_id", nullable = false)
+    @Column(name = "status_id", nullable = false, columnDefinition = "goal_status_type")
     private GoalStatusEnum status = GoalStatusEnum.WAITING;
 
     /**
