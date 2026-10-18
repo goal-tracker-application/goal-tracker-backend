@@ -57,6 +57,8 @@ public abstract class AbstractIntegrationTest {
     void setUpBase() {
         transactionTemplate.executeWithoutResult(status -> {
             entityManager.createNativeQuery("DELETE FROM users").executeUpdate();
+            entityManager.createNativeQuery("DELETE FROM goals").executeUpdate();
+            entityManager.createNativeQuery("DELETE FROM goal_status_histories").executeUpdate();
         });
     }
 }
