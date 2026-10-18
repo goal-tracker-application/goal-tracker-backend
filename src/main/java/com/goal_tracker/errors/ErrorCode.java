@@ -42,7 +42,26 @@ public enum ErrorCode {
      * Occurs when a subgoal's end date is later than its ancestor's end date.
      */
     ERR_GOAL_END_DATE_VIOLATION("The subgoal's end date cannot be later than its ancestor's end date."),
-    
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to transition a goal to its current status.
+     */
+    ERR_GOAL_STATUS_UNCHANGED("The goal is already in the requested status."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to modify a goal that has already reached a terminal state.
+     */
+    ERR_GOAL_TERMINAL_STATE("Cannot modify a goal that has already reached a terminal state."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting an invalid goal status transition.
+     */
+    ERR_INVALID_GOAL_TRANSITION("The requested goal status transition is not allowed."),
+
+
     /**
      * HTTP 401 - Unauthorized.
      * Occurs when the request lacks valid authentication credentials,
