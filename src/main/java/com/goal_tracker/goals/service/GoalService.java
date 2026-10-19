@@ -3,6 +3,7 @@ package com.goal_tracker.goals.service;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import com.goal_tracker.goals.exceptions.GoalNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalOwnershipException;
 import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
+import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
 import com.goal_tracker.goals.mapper.GoalMapper;
 import com.goal_tracker.goals.repository.GoalRepository;
@@ -387,5 +389,41 @@ public class GoalService {
                 cascadeTerminalToChildren(child);
             }
         }
+    }
+
+    /**
+     * Retrieves root-level goals for a specific user, with an optional filter by status identifier.
+     * <p>
+     * If a status identifier is provided, it validates its existence through the goal status enumeration.
+     * If the status identifier does not exist, a {@link GoalStatusNotFoundException} is thrown.
+     * If no status identifier is provided, all root-level goals belonging to the user are returned.
+     * </p>
+     *
+     * @param userId       The unique identifier of the authenticated user owning the goals.
+     * @param goalStatusId Optional numeric identifier to filter root goals by status.
+     * @return A list of {@link GoalResponseDto} representing the filtered root-level goals.
+     * @throws GoalStatusNotFoundException if the provided status identifier is invalid or non-existent.
+     */
+    @Transactional(readOnly = true)
+    public List<GoalResponseDto> getRootGoals(Long userId, Integer goalStatusId) {
+        GoalStatusEnum status = null;
+
+        if (goalStatusId != null) {
+            status = GoalStatusEnum.fromId(goalStatusId);
+            if(status==null){
+                throw new GoalStatusNotFoundException(goalStatusId);
+            }
+        }
+
+        List<Goal> rootGoals;
+        if (status != null) {
+            rootGoals = goalRepository.findByUserIdAndParentIsNullAndStatus(userId, status);
+        } else {
+            rootGoals = goalRepository.findByUserIdAndParentIsNull(userId);
+        }
+
+        return rootGoals.stream()
+            .map(goalMapper::toResponse)
+            .toList();
     }
 }
