@@ -835,4 +835,107 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(GoalStatusNotFoundException.class)
                 .hasMessageContaining("Goal status with ID 99999 was not found.");
     }
+
+    /**
+     * Verifies that retrieving a goal tree successfully returns the root goal along with its nested sub-goals.
+     */
+    @Test
+    @DisplayName("getGoalTree: Should successfully return the goal tree with its sub-goals when valid ID and ownership are provided")
+    void getGoalTreeSuccessWithSubGoals() {
+        Goal parent = new Goal(
+                testUser.getId(),
+                null,
+                "Parent Goal",
+                "Root node",
+                LocalDate.now(),
+                LocalDate.now().plusDays(10),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        parent = goalRepository.save(parent);
+        goalRepository.flush();
+
+        Goal child = new Goal(
+                testUser.getId(),
+                parent,
+                "Child Goal",
+                "Leaf node",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.WAITING
+        );
+        child = goalRepository.save(child);
+        goalRepository.flush();
+
+        parent.getSubGoals().add(child);
+        goalRepository.save(parent);
+        goalRepository.flush();
+
+        var result = goalService.getGoalTree(testUser.getId(), parent.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(parent.getId());
+        assertThat(result.title()).isEqualTo("Parent Goal");
+        assertThat(result.subGoals()).isNotNull();
+        assertThat(result.subGoals()).hasSize(1);
+        assertThat(result.subGoals().get(0).title()).isEqualTo("Child Goal");
+    }
+
+    /**
+     * Verifies that retrieving a goal tree successfully returns just the root node when it has no sub-goals.
+     */
+    @Test
+    @DisplayName("getGoalTree: Should successfully return root node only when goal has no sub-goals")
+    void getGoalTreeSuccessRootOnly() {
+        Goal goal = new Goal(
+                testUser.getId(),
+                null,
+                "Single Root Goal",
+                "No children",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var result = goalService.getGoalTree(testUser.getId(), goal.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(goal.getId());
+        assertThat(result.subGoals()).isEmpty();
+    }
+
+    /**
+     * Verifies that attempting to retrieve a goal tree for a non-existent goal ID throws a GoalNotFoundException.
+     */
+    @Test
+    @DisplayName("getGoalTree: Should throw GoalNotFoundException when goal does not exist")
+    void getGoalTreeNotFound() {
+        assertThatThrownBy(() -> goalService.getGoalTree(testUser.getId(), 99999L))
+                .isInstanceOf(GoalNotFoundException.class)
+                .hasMessageContaining(String.format("Goal with ID %d was not found or is inaccessible.", 99999L));
+    }
+
+    /**
+     * Verifies that attempting to retrieve a goal tree belonging to another user throws a GoalOwnershipException.
+     */
+    @Test
+    @DisplayName("getGoalTree: Should throw GoalOwnershipException when goal belongs to another user")
+    void getGoalTreeOwnershipViolation() {
+        Goal foreignGoal = new Goal(
+                anotherUser.getId(),
+                null,
+                "Foreign Goal",
+                "Owned by another user",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        assertThatThrownBy(() -> goalService.getGoalTree(testUser.getId(), savedForeignGoal.getId()))
+                .isInstanceOf(GoalOwnershipException.class)
+                .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d.", foreignGoal.getId(), testUser.getId()));
+    }
 }
