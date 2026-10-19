@@ -18,6 +18,12 @@ public record GoalStatusHistoryResponseDto(
     Integer statusId,
 
     /**
+     * Name string of the cause that triggered the transition (e.g., 'USER', 'UPWARD_CASCADE', 'DOWNWARD_CASCADE').
+     */
+    @NotNull(message = "Transition cause is required.")
+    String cause,
+
+    /**
      * Optional audit notes or reasons provided during the status transition.
      * Capped at 500 characters matching the underlying data constraints.
      */
