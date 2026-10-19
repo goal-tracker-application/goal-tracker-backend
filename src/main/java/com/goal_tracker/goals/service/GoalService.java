@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
+import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.entity.Goal;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
 import com.goal_tracker.goals.entity.GoalStatusHistory;
@@ -425,5 +426,32 @@ public class GoalService {
         return rootGoals.stream()
             .map(goalMapper::toResponse)
             .toList();
+    }
+
+    /**
+     * Retrieves the complete hierarchical tree of a goal for a specific user.
+     * <p>
+     * It fetches the root goal along with its entire sub-goal tree using an optimized fetch graph,
+     * validates that the goal exists, and enforces strict ownership security constraints.
+     * </p>
+     *
+     * @param userId The unique identifier of the authenticated user requesting the goal tree.
+     * @param goalId The unique identifier of the target root goal.
+     * @return A hierarchical {@link GoalTreeResponseDto} representing the goal and its nested sub-goals.
+     * @throws GoalNotFoundException  if the goal does not exist.
+     * @throws GoalOwnershipException if the goal does not belong to the authenticated user.
+     */
+    @Transactional(readOnly = true)
+    public GoalTreeResponseDto getGoalTree(Long userId, Long goalId) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new GoalNotFoundException(goalId));
+
+        if (!goal.getUserId().equals(userId)) {
+            throw new GoalOwnershipException(goalId, userId);
+        }
+
+        Goal goalTree = goalRepository.findWithSubGoalsByIdAndUserId(goalId,userId).get();
+
+        return goalMapper.toTreeResponse(goalTree);
     }
 }
