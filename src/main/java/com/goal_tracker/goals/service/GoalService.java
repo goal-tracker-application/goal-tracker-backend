@@ -13,16 +13,21 @@ import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
 import com.goal_tracker.goals.dto.GoalStatusHistoryResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
+import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.entity.Goal;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
 import com.goal_tracker.goals.entity.GoalStatusHistory;
 import com.goal_tracker.goals.entity.StatusTransitionCauseEnum;
+import com.goal_tracker.goals.exceptions.GoalEndDateImmutableException;
 import com.goal_tracker.goals.exceptions.GoalEndDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalOwnershipException;
 import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
+import com.goal_tracker.goals.exceptions.GoalStartDateImmutableException;
+import com.goal_tracker.goals.exceptions.GoalStartDateRequiredException;
 import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
+import com.goal_tracker.goals.exceptions.GoalTerminalStateException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
 import com.goal_tracker.goals.mapper.GoalMapper;
 import com.goal_tracker.goals.mapper.GoalStatusHistoryMapper;
@@ -77,7 +82,7 @@ public class GoalService {
                 throw new GoalOwnershipException(parentGoal.getId(), userId);
             }
 
-            validateHierarchyDates(parentGoal, dto.startDate(), dto.endDate());
+            validateUpwardHierarchyDates(parentGoal, dto.startDate(), dto.endDate());
         }
 
         Goal goal = goalMapper.toEntity(dto);
@@ -108,7 +113,7 @@ public class GoalService {
      * @throws GoalStartDateViolationException if the start date of the subgoal is before the start date of one of its ancestors.
      * @throws GoalEndDateViolationException   if the end date of the subgoal is after the end date of one of its ancestors.
      */
-    private void validateHierarchyDates(Goal parent, LocalDate subgoalStartDate, LocalDate subgoalEndDate) {
+    private void validateUpwardHierarchyDates(Goal parent, LocalDate subgoalStartDate, LocalDate subgoalEndDate) {
         Goal current = parent;
         while (current != null) {
             if (current.getStartDate() != null && subgoalStartDate != null) {
@@ -266,7 +271,17 @@ public class GoalService {
             goal.setStatus(GoalStatusEnum.IN_PROGRESS);
             goal.setStartDate(LocalDate.now());
 
-            goalStatusHistoryRepository.save(new GoalStatusHistory(goal, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.USER, notes, OffsetDateTime.now()));
+            goalStatusHistoryRepository.save
+            (
+                new GoalStatusHistory(
+                    goal, 
+                    GoalStatusEnum.IN_PROGRESS, 
+                    StatusTransitionCauseEnum.USER, 
+                    notes, 
+                    OffsetDateTime.now()
+                )
+            );
+            propagateInProgressDownwards(goal);
 
         } else if (currentStatus == GoalStatusEnum.PAUSED) {
             GoalStatusHistory lastPauseRecord = goalStatusHistoryRepository
@@ -358,7 +373,16 @@ public class GoalService {
                     }
 
                     child.setStatus(GoalStatusEnum.IN_PROGRESS);
-                    goalStatusHistoryRepository.save(new GoalStatusHistory(child, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.DOWNWARD_CASCADE, "Unpaused by parent cascade", OffsetDateTime.now()));
+                    goalStatusHistoryRepository.save
+                    (
+                        new GoalStatusHistory(
+                            child, 
+                            GoalStatusEnum.IN_PROGRESS, 
+                            StatusTransitionCauseEnum.DOWNWARD_CASCADE, 
+                            null, 
+                            OffsetDateTime.now()
+                        )
+                    );
                     goalRepository.save(child);
 
                     cascadeUnpauseToChildren(child);
@@ -487,5 +511,153 @@ public class GoalService {
         return histories.stream()
             .map(goalStatusHistoryMapper::toResponse)
             .toList();
+    }
+
+    /**
+     * Updates an existing goal's basic properties and dates, respecting multi-tenant boundaries,
+     * upward/downward hierarchy date constraints, terminal state protections, nullable end dates, 
+     * and strict immutable/required date rules per status.
+     *
+     * @param userId The unique identifier of the authenticated user performing the update.
+     * @param goalId The unique identifier of the goal to update.
+     * @param dto    The update payload containing the modified details.
+     * @return An immutable {@link GoalResponseDto} representing the updated goal.
+     * @throws GoalNotFoundException           if the goal does not exist.
+     * @throws GoalOwnershipException          if the goal does not belong to the authenticated user.
+     * @throws GoalTerminalStateException      if the goal has reached a terminal state and cannot be modified.
+     * @throws GoalStartDateImmutableException if attempting to change the start date of an IN_PROGRESS goal.
+     * @throws GoalStartDateRequiredException  if attempting to clear the start date of an IN_PROGRESS or PAUSED goal.
+     * @throws GoalEndDateImmutableException   if attempting to modify or clear the end date of a PAUSED goal.
+     */
+    @Transactional
+    public GoalResponseDto updateGoal(Long userId, Long goalId, GoalUpdateRequestDto dto) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new GoalNotFoundException(goalId));
+
+        if (!goal.getUserId().equals(userId)) {
+            throw new GoalOwnershipException(goalId, userId);
+        }
+
+        GoalStatusEnum currentStatus = goal.getStatus();
+
+        if (currentStatus == GoalStatusEnum.COMPLETED || 
+            currentStatus == GoalStatusEnum.FAILED || 
+            currentStatus == GoalStatusEnum.DISCARDED) {
+            throw new GoalTerminalStateException(goalId);
+        }
+
+        if (currentStatus == GoalStatusEnum.IN_PROGRESS) {
+            if (dto.startDate() == null || !dto.startDate().equals(goal.getStartDate())) {
+                throw new GoalStartDateImmutableException(goalId);
+            }
+        } else if (currentStatus == GoalStatusEnum.PAUSED) {
+            if (dto.startDate() == null) {
+                throw new GoalStartDateRequiredException(goalId);
+            }
+            if (dto.endDate() == null || !dto.endDate().equals(goal.getEndDate())) {
+                throw new GoalEndDateImmutableException(goalId);
+            }
+        }
+
+        if (goal.getParent() != null) {
+            validateUpwardHierarchyDates(goal.getParent(), dto.startDate(), dto.endDate());
+        }
+
+        if (!goal.getSubGoals().isEmpty()) {
+            validateDownwardHierarchyDates(goal, dto.startDate(), dto.endDate());
+        }
+
+        goal.setTitle(dto.title());
+        goal.setDescription(dto.description());
+        goal.setEndDate(dto.endDate());
+
+        if (currentStatus == GoalStatusEnum.WAITING || currentStatus == GoalStatusEnum.PAUSED) {
+            if (dto.startDate() != null && !dto.startDate().equals(goal.getStartDate())) {
+                goal.setStartDate(dto.startDate());
+
+                if (dto.startDate().isEqual(LocalDate.now())) {
+                    goal.setStatus(GoalStatusEnum.IN_PROGRESS);
+                    
+                    goalStatusHistoryRepository.save(new GoalStatusHistory(
+                        goal,
+                        GoalStatusEnum.IN_PROGRESS,
+                        StatusTransitionCauseEnum.USER,
+                        "Goal activated via start date update to today",
+                        OffsetDateTime.now()
+                    ));
+
+                    if (currentStatus == GoalStatusEnum.PAUSED) {
+                        cascadeUnpauseToChildren(goal);
+                    }
+                    else if (currentStatus == GoalStatusEnum.WAITING){
+                        propagateInProgressDownwards(goal);
+                    }
+                    if (goal.getParent() != null) {
+                        propagateInProgressUpwards(goal.getParent(), goal.getId(), LocalDate.now());
+                    }
+                }
+            }
+        }
+
+        Goal updatedGoal = goalRepository.save(goal);
+        return goalMapper.toResponse(updatedGoal);
+    }
+
+    /**
+     * Recursively traverses down the descendant chain (sub-goals) to validate temporal constraints:
+     * - Parent startDate cannot be later than any descendant's startDate (parent cannot start after children).
+     * - Parent endDate cannot be earlier than any descendant's endDate (parent cannot end before children).
+     * 
+     * @param goal               The parent goal being updated.
+     * @param newParentStartDate The proposed new start date for the parent.
+     * @param newParentEndDate   The proposed new end date for the parent.
+     * @throws GoalStartDateViolationException if the new start date is after a descendant's start date.
+     * @throws GoalEndDateViolationException   if the new end date is before a descendant's end date.
+     */
+    private void validateDownwardHierarchyDates(Goal goal, LocalDate newParentStartDate, LocalDate newParentEndDate) {
+        for (Goal child : goal.getSubGoals()) {
+            if (child.getStartDate() != null && newParentStartDate != null) {
+                if (newParentStartDate.isAfter(child.getStartDate())) {
+                    throw new GoalStartDateViolationException(child.getStartDate(), newParentStartDate);
+                }
+            }
+
+            if (child.getEndDate() != null && newParentEndDate != null) {
+                if (newParentEndDate.isBefore(child.getEndDate())) {
+                    throw new GoalEndDateViolationException(child.getEndDate(), newParentEndDate);
+                }
+            }
+
+            validateDownwardHierarchyDates(child, newParentStartDate, newParentEndDate);
+        }
+    }
+
+    /**
+     * Propagates the IN_PROGRESS status to all the descendants of a goal
+     * @param goal goal that started the IN_PROGRESS propagation
+     */
+    private void propagateInProgressDownwards(Goal goal){
+        if(!goal.getSubGoals().isEmpty()){
+            for(Goal child : goal.getSubGoals()){
+                if(child.getStatus()==GoalStatusEnum.WAITING){
+                    child.setStartDate(LocalDate.now());
+                    child.setStatus(GoalStatusEnum.IN_PROGRESS);
+                    goalStatusHistoryRepository.save
+                    (
+                        new GoalStatusHistory
+                        (
+                            child, 
+                            GoalStatusEnum.IN_PROGRESS, 
+                            StatusTransitionCauseEnum.DOWNWARD_CASCADE, 
+                            null,
+                            OffsetDateTime.now()
+                        )
+                    );
+                    goalRepository.save(child);
+
+                    propagateInProgressDownwards(child);
+                }
+            }
+        }
     }
 }
