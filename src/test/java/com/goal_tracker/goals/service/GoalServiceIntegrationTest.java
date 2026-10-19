@@ -938,4 +938,97 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(GoalOwnershipException.class)
                 .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d.", foreignGoal.getId(), testUser.getId()));
     }
+
+    /**
+     * Verifies that retrieving goal history successfully returns the chronological timeline when records exist.
+     */
+    @Test
+    @DisplayName("getGoalHistory: Should successfully return history timeline when goal exists and has status changes")
+    void getGoalHistorySuccessWithRecords() {
+        Goal goal = new Goal(
+                testUser.getId(),
+                null,
+                "History Goal",
+                "Desc",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        GoalStatusHistory history = new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.USER,
+                "Initial creation notes",
+                OffsetDateTime.now()
+        );
+        goalStatusHistoryRepository.save(history);
+        goalStatusHistoryRepository.flush();
+
+        var result = goalService.getGoalHistory(testUser.getId(), goal.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).cause()).isEqualTo(StatusTransitionCauseEnum.USER.name());
+    }
+
+    /**
+     * Verifies that retrieving goal history successfully returns an empty list when no status history records exist.
+     */
+    @Test
+    @DisplayName("getGoalHistory: Should successfully return empty list when goal has no status history records")
+    void getGoalHistorySuccessEmptyList() {
+        Goal goal = new Goal(
+                testUser.getId(),
+                null,
+                "No History Goal",
+                "Desc",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var result = goalService.getGoalHistory(testUser.getId(), goal.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result).isEmpty();
+    }
+
+    /**
+     * Verifies that attempting to retrieve goal history for a non-existent goal ID throws a GoalNotFoundException.
+     */
+    @Test
+    @DisplayName("getGoalHistory: Should throw GoalNotFoundException when goal does not exist")
+    void getGoalHistoryNotFound() {
+        assertThatThrownBy(() -> goalService.getGoalHistory(testUser.getId(), 99999L))
+                .isInstanceOf(GoalNotFoundException.class)
+                .hasMessageContaining("Goal with ID 99999 was not found");
+    }
+
+    /**
+     * Verifies that attempting to retrieve goal history for a goal belonging to another user throws a GoalOwnershipException.
+     */
+    @Test
+    @DisplayName("getGoalHistory: Should throw GoalOwnershipException when goal belongs to another user")
+    void getGoalHistoryOwnershipViolation() {
+        Goal foreignGoal = new Goal(
+                anotherUser.getId(),
+                null,
+                "Foreign Goal",
+                "Owned by another user",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        assertThatThrownBy(() -> goalService.getGoalHistory(testUser.getId(), savedForeignGoal.getId()))
+                .isInstanceOf(GoalOwnershipException.class)
+                .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d", foreignGoal.getId(), testUser.getId()));
+    }
 }
