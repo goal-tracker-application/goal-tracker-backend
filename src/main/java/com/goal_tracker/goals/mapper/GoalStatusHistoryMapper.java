@@ -36,6 +36,7 @@ public interface GoalStatusHistoryMapper {
      * @return Immutable {@link GoalStatusHistoryResponseDto} to be exposed in the API.
      */
     @Mapping(target = "statusId", expression = "java(history.getStatus() != null ? history.getStatus().getId() : null)")
+    @Mapping(target = "cause", expression = "java(history.getCause() != null ? history.getCause().name() : null)")
     @BeanMapping(unmappedSourcePolicy = ReportingPolicy.IGNORE)
     GoalStatusHistoryResponseDto toResponse(GoalStatusHistory history);
 }
