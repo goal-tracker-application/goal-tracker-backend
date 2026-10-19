@@ -17,16 +17,21 @@ import org.springframework.transaction.annotation.Transactional;
 import com.goal_tracker.AbstractIntegrationTest;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
+import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.entity.Goal;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
 import com.goal_tracker.goals.entity.GoalStatusHistory;
 import com.goal_tracker.goals.entity.StatusTransitionCauseEnum;
+import com.goal_tracker.goals.exceptions.GoalEndDateImmutableException;
 import com.goal_tracker.goals.exceptions.GoalEndDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalOwnershipException;
 import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
+import com.goal_tracker.goals.exceptions.GoalStartDateImmutableException;
+import com.goal_tracker.goals.exceptions.GoalStartDateRequiredException;
 import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
+import com.goal_tracker.goals.exceptions.GoalTerminalStateException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
 import com.goal_tracker.goals.repository.GoalRepository;
 import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
@@ -622,6 +627,81 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
+     * Verifies that a IN_PROGRESS status change propagates downwards and upwards
+     */
+    @Test
+    @DisplayName("changeGoalStatus: Should cascade IN_PROGRESS status downwards and upwards")
+    void changeStatusCascadingInProgressStatusSuccess() {
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+        Goal parent = new Goal
+        (
+            testUser.getId(), 
+            null, 
+            "Parent", 
+            "Desc", 
+            null, 
+            null,
+            GoalStatusEnum.WAITING
+        );
+        parent = goalRepository.save(parent);
+        goalRepository.flush();
+
+
+        Goal child = new Goal
+        (
+            testUser.getId(), 
+            parent, 
+            "Child", 
+            "Desc", 
+            tomorrow,
+            tomorrow.plusDays(5), 
+            GoalStatusEnum.WAITING
+        );
+        child = goalRepository.save(child);
+        goalRepository.flush();
+        
+        parent.getSubGoals().add(child);
+        goalRepository.save(parent);
+        goalRepository.flush();
+
+        Goal grandChild = new Goal
+        (
+            testUser.getId(), 
+            child, 
+            "User Child", 
+            "Desc", 
+            tomorrow.plusDays(1),
+            tomorrow.plusDays(5), 
+            GoalStatusEnum.WAITING
+        );
+        grandChild = goalRepository.save(grandChild);
+        goalRepository.flush();
+        
+        child.getSubGoals().add(grandChild);
+        goalRepository.save(child);
+        goalRepository.flush();
+
+
+        var request = new GoalStatusChangeRequestDto(GoalStatusEnum.IN_PROGRESS.getId(), "Start work");
+
+        var response = goalService.changeGoalStatus(testUser.getId(), child.getId(), request);
+
+        assertThat(response.statusId()).isEqualTo(GoalStatusEnum.IN_PROGRESS.getId());
+
+        Goal updatedParent = goalRepository.findById(parent.getId()).orElseThrow();
+        assertThat(updatedParent.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedParent.getStartDate()).isEqualTo(LocalDate.now());
+
+        Goal updatedChild = goalRepository.findById(child.getId()).orElseThrow();
+        assertThat(updatedChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedChild.getStartDate()).isEqualTo(LocalDate.now());
+
+        Goal updatedGrandChild = goalRepository.findById(grandChild.getId()).orElseThrow();
+        assertThat(updatedGrandChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedGrandChild.getStartDate()).isEqualTo(LocalDate.now());
+    }
+
+    /**
      * Verifies that elastic unpausing correctly affects parents and children paused by system cascades while keeping user-paused children intact.
      */
     @Test
@@ -1030,5 +1110,586 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> goalService.getGoalHistory(testUser.getId(), savedForeignGoal.getId()))
                 .isInstanceOf(GoalOwnershipException.class)
                 .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d", foreignGoal.getId(), testUser.getId()));
+    }
+
+    /**
+     * Verifies that a WAITING goal without subgoals can be successfully updated with arbitrary changes.
+     */
+    @Test
+    @DisplayName("updateGoal: Should successfully update a WAITING goal without subgoals with arbitrary changes")
+    void updateGoalWaitingWithoutSubgoalsSuccess() {
+        LocalDate futureDate = LocalDate.now().plusDays(5);
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Initial Title",
+            "Initial Description",
+            futureDate,
+            futureDate.plusDays(10),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto(
+            "Updated Title",
+            "Updated Description",
+            futureDate.plusDays(1),
+            futureDate.plusDays(12)
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), goal.getId(), request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.title()).isEqualTo("Updated Title");
+        assertThat(response.description()).isEqualTo("Updated Description");
+    }
+
+    /**
+     * Verifies that updating a goal respects hierarchy restrictions both upward and downward.
+     */
+    @Test
+    @DisplayName("updateGoal: Should successfully update goal respecting upward and downward hierarchy restrictions")
+    void updateGoalHierarchyRestrictionsSuccess() {
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+        Goal parent = new Goal(
+            testUser.getId(),
+            null,
+            "Parent Goal",
+            "Parent Desc",
+            tomorrow,
+            tomorrow.plusDays(20),
+            GoalStatusEnum.WAITING
+        );
+        parent = goalRepository.save(parent);
+        goalRepository.flush();
+
+        Goal child = new Goal(
+            testUser.getId(),
+            parent,
+            "Child Goal",
+            "Child Desc",
+            tomorrow.plusDays(2),
+            tomorrow.plusDays(10),
+            GoalStatusEnum.WAITING
+        );
+        child = goalRepository.save(child);
+        parent.getSubGoals().add(child);
+        goalRepository.save(parent);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto(
+            "Updated Parent",
+            "Updated Desc",
+            tomorrow,
+            tomorrow.plusDays(15)
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), parent.getId(), request);
+        assertThat(response).isNotNull();
+        assertThat(response.title()).isEqualTo("Updated Parent");
+    }
+
+    /**
+     * Verifies that non-date fields can be successfully updated on any non-terminal goal.
+     */
+    @Test
+    @DisplayName("updateGoal: Should successfully update non-date fields on non-terminal goal")
+    void updateGoalNonDateFieldsSuccess() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Old Title",
+            "Old Desc",
+            today,
+            today.plusDays(10),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto(
+            "New Title",
+            "New Desc",
+            today,
+            today.plusDays(10)
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), goal.getId(), request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.title()).isEqualTo("New Title");
+        assertThat(response.description()).isEqualTo("New Desc");
+    }
+
+    /**
+     * Verifies that an IN_PROGRESS goal can have its end date cleared (set to null).
+     */
+    @Test
+    @DisplayName("updateGoal: Should successfully clear end date of an IN_PROGRESS goal")
+    void updateGoalInProgressClearEndDateSuccess() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Active Goal",
+            "Desc",
+            today,
+            today.plusDays(10),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto(
+            "Active Goal",
+            "Desc",
+            today,
+            null
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), goal.getId(), request);
+
+        assertThat(response).isNotNull();
+        Goal updated = goalRepository.findById(goal.getId()).orElseThrow();
+        assertThat(updated.getEndDate()).isNull();
+    }
+
+    /**
+     * Verifies that changing start date to today on a WAITING goal triggers activation 
+     * and respects child waiting states.
+     */
+    @Test
+    @DisplayName("updateGoal: Should trigger activation to IN_PROGRESS when WAITING goal start date is changed to today")
+    void updateGoalWaitingToInProgressCascadeSuccess() {
+        LocalDate today = LocalDate.now();
+        
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Waiting Goal",
+            "Desc",
+            null,
+            null,
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        Goal child = new Goal(
+            testUser.getId(),
+            goal,
+            "Child Goal",
+            "Child Desc",
+            today.plusDays(1),
+            today.plusDays(8),
+            GoalStatusEnum.WAITING
+        );
+        child = goalRepository.save(child);
+        goal.getSubGoals().add(child);
+        goalRepository.save(goal);
+        goalRepository.flush();
+
+
+        Goal grandChild =  new Goal(
+            testUser.getId(),
+            child,
+            "Grand Child Goal",
+            "Grand Child Desc",
+            today.plusDays(2),
+            today.plusDays(7),
+            GoalStatusEnum.WAITING
+        );
+        grandChild = goalRepository.save(grandChild);
+        child.getSubGoals().add(grandChild);
+        goalRepository.save(child);
+        goalRepository.flush();
+        var request = new GoalUpdateRequestDto(
+            "Waiting Goal",
+            "Desc",
+            today,
+            today.plusDays(10)
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), child.getId(), request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.statusId()).isEqualTo(GoalStatusEnum.IN_PROGRESS.getId());
+
+        Goal updatedGoal = goalRepository.findById(goal.getId()).orElseThrow();
+        assertThat(updatedGoal.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedGoal.getStartDate()).isEqualTo(today);
+
+        Goal updatedChild =  goalRepository.findById(child.getId()).orElseThrow();
+        assertThat(updatedChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedChild.getStartDate()).isEqualTo(today);
+
+        Goal updatedGrandChild = goalRepository.findById(grandChild.getId()).orElseThrow();
+        assertThat(updatedGrandChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedGrandChild.getStartDate()).isEqualTo(today);
+    }
+
+    /**
+     * Verifies that changing start date to today on a PAUSED goal triggers cascade unpausing to IN_PROGRESS.
+     */
+    @Test
+    @DisplayName("updateGoal: Should trigger cascade unpausing to IN_PROGRESS when PAUSED goal start date is changed to today")
+    void updateGoalPausedToInProgressCascadeSuccess() {
+        LocalDate aWeekAgo = LocalDate.now().minusDays(7);
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Paused Goal",
+            "Desc",
+            aWeekAgo,
+            aWeekAgo.plusDays(11),
+            GoalStatusEnum.PAUSED
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(new GoalStatusHistory(
+            goal,
+            GoalStatusEnum.PAUSED,
+            StatusTransitionCauseEnum.USER,
+            "User paused goal",
+            OffsetDateTime.now().minusDays(6)
+        ));
+
+        Goal child = new Goal(
+            testUser.getId(),
+            goal,
+            "Child Goal",
+            "Child Desc",
+            aWeekAgo.plusDays(2),
+            aWeekAgo.plusDays(10),
+            GoalStatusEnum.PAUSED
+        );
+        child = goalRepository.save(child);
+        goal.getSubGoals().add(child);
+        goalRepository.save(goal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(new GoalStatusHistory(
+            child,
+            GoalStatusEnum.PAUSED,
+            StatusTransitionCauseEnum.DOWNWARD_CASCADE,
+            "Cascaded pause",
+            OffsetDateTime.now().minusDays(6)
+        ));
+
+        Goal grandChild = new Goal(
+            testUser.getId(),
+            child,
+            "Grand Child Goal",
+            "Grand Child Desc",
+            aWeekAgo.plusDays(8),
+            aWeekAgo.plusDays(9),
+            GoalStatusEnum.PAUSED
+        );
+        grandChild = goalRepository.save(grandChild);
+        child.getSubGoals().add(grandChild);
+        goalRepository.save(child);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(new GoalStatusHistory(
+            grandChild,
+            GoalStatusEnum.PAUSED,
+            StatusTransitionCauseEnum.DOWNWARD_CASCADE,
+            "Cascaded pause",
+            OffsetDateTime.now().minusDays(6)
+        ));
+        goalStatusHistoryRepository.flush();
+
+        LocalDate today = LocalDate.now();
+        var request = new GoalUpdateRequestDto(
+            "Paused Goal",
+            "Desc",
+            today,
+            aWeekAgo.plusDays(10)
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), child.getId(), request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.statusId()).isEqualTo(GoalStatusEnum.IN_PROGRESS.getId());
+
+        Goal updatedParent = goalRepository.findById(goal.getId()).orElseThrow();
+        assertThat(updatedParent.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+
+        Goal updatedGrandChild = goalRepository.findById(grandChild.getId()).orElseThrow();
+        assertThat(updatedGrandChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+    }
+
+    /**
+     * Verifies that updating a child goal's start date to today under an ancestor hierarchy with null start dates 
+     * triggers upward propagation to grandparents/parents and correctly activates the sub-tree.
+     */
+    @Test
+    @DisplayName("updateGoal: Should trigger upward cascade to grandparent and parent when child start date is updated to today with null ancestor dates")
+    void updateGoalWithNullAncestorDatesTriggersUpwardCascadeSuccess() {
+        LocalDate today = LocalDate.now();
+
+        Goal grandfather = new Goal(
+            testUser.getId(),
+            null,
+            "Grandfather Goal",
+            "Top ancestor",
+            null,
+            null,
+            GoalStatusEnum.WAITING
+        );
+        grandfather = goalRepository.save(grandfather);
+        goalRepository.flush();
+
+        Goal parent = new Goal(
+            testUser.getId(),
+            grandfather,
+            "Parent Goal",
+            "Intermediate ancestor",
+            null,
+            null,
+            GoalStatusEnum.WAITING
+        );
+        parent = goalRepository.save(parent);
+        grandfather.getSubGoals().add(parent);
+        goalRepository.save(grandfather);
+        goalRepository.flush();
+
+        LocalDate futureDate = today.plusDays(5);
+        Goal child = new Goal(
+            testUser.getId(),
+            parent,
+            "Child Goal",
+            "Leaf node",
+            futureDate,
+            futureDate.plusDays(10),
+            GoalStatusEnum.WAITING
+        );
+        child = goalRepository.save(child);
+        parent.getSubGoals().add(child);
+        goalRepository.save(parent);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto(
+            "Child Goal",
+            "Leaf node updated",
+            today,
+            futureDate.plusDays(10)
+        );
+
+        var response = goalService.updateGoal(testUser.getId(), parent.getId(), request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.statusId()).isEqualTo(GoalStatusEnum.IN_PROGRESS.getId());
+
+        Goal updatedChild = goalRepository.findById(child.getId()).orElseThrow();
+        assertThat(updatedChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedChild.getStartDate()).isEqualTo(today);
+
+        Goal updatedGrandfather = goalRepository.findById(grandfather.getId()).orElseThrow();
+        assertThat(updatedGrandfather.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedGrandfather.getStartDate()).isEqualTo(today);
+
+        var childHistories = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(child.getId(), testUser.getId());
+        boolean parentCascaded = childHistories.stream()
+                .anyMatch(h -> h.getCause() == StatusTransitionCauseEnum.DOWNWARD_CASCADE);
+        assertThat(parentCascaded).isTrue();
+
+        var grandfatherHistories = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(grandfather.getId(), testUser.getId());
+        boolean grandfatherCascaded = grandfatherHistories.stream()
+                .anyMatch(h -> h.getCause() == StatusTransitionCauseEnum.UPWARD_CASCADE);
+        assertThat(grandfatherCascaded).isTrue();
+    }
+
+    /**
+     * Verifies that attempting to update a non-existent goal throws a GoalNotFoundException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalNotFoundException when goal does not exist")
+    void updateGoalNotFound() {
+        LocalDate today = LocalDate.now();
+        var request = new GoalUpdateRequestDto("Title", "Desc", today, today.plusDays(5));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), 99999L, request))
+                .isInstanceOf(GoalNotFoundException.class);
+    }
+
+    /**
+     * Verifies that attempting to update a goal belonging to another user throws a GoalOwnershipException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalOwnershipException when goal belongs to another user")
+    void updateGoalOwnershipViolation() {
+        LocalDate today = LocalDate.now();
+        Goal foreignGoal = new Goal(
+            anotherUser.getId(),
+            null,
+            "Foreign Goal",
+            "Desc",
+            today,
+            today.plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", today, today.plusDays(5));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedForeignGoal.getId(), request))
+                .isInstanceOf(GoalOwnershipException.class);
+    }
+
+    /**
+     * Verifies that attempting to update a terminal goal throws a GoalTerminalStateException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalTerminalStateException when goal is in a terminal state")
+    void updateGoalTerminalStateViolation() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Completed Goal",
+            "Desc",
+            today,
+            today.plusDays(5),
+            GoalStatusEnum.COMPLETED
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto("New Title", "Desc", today, today.plusDays(5));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(GoalTerminalStateException.class);
+    }
+
+    /**
+     * Verifies that attempting to modify the start date of an IN_PROGRESS goal throws a GoalStartDateImmutableException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalStartDateImmutableException when modifying start date of an IN_PROGRESS goal")
+    void updateGoalStartDateImmutableViolation() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Active Goal",
+            "Desc",
+            today,
+            today.plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", today.plusDays(1), today.plusDays(5));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(GoalStartDateImmutableException.class);
+    }
+
+    /**
+     * Verifies that attempting to clear the start date of a PAUSED goal throws a GoalStartDateRequiredException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalStartDateRequiredException when clearing start date of a PAUSED goal")
+    void updateGoalStartDateRequiredViolation() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Paused Goal",
+            "Desc",
+            today,
+            today.plusDays(5),
+            GoalStatusEnum.PAUSED
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        
+        goalStatusHistoryRepository.save(new GoalStatusHistory(
+            savedGoal,
+            GoalStatusEnum.PAUSED,
+            StatusTransitionCauseEnum.USER,
+            "Paused for testing",
+            OffsetDateTime.now().minusDays(1)
+        ));
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", null, null);
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(GoalStartDateRequiredException.class);
+    }
+
+    /**
+     * Verifies that attempting to modify the end date of a PAUSED goal throws a GoalEndDateImmutableException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalEndDateImmutableException when modifying end date of a PAUSED goal")
+    void updateGoalEndDateImmutableViolation() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Paused Goal",
+            "Desc",
+            today,
+            today.plusDays(5),
+            GoalStatusEnum.PAUSED
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", today, today.plusDays(10));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(GoalEndDateImmutableException.class);
+    }
+
+    /**
+     * Verifies that updating a goal with dates violating upward hierarchy throws a GoalStartDateViolationException.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw GoalStartDateViolationException when violating upward start date hierarchy")
+    void updateGoalUpwardHierarchyStartDateViolation() {
+        LocalDate today = LocalDate.now();
+        Goal parent = new Goal(
+            testUser.getId(),
+            null,
+            "Parent",
+            "Desc",
+            today.plusDays(5),
+            today.plusDays(15),
+            GoalStatusEnum.WAITING
+        );
+        Goal savedParent = goalRepository.save(parent);
+        goalRepository.flush();
+
+        Goal child = new Goal(
+            testUser.getId(),
+            savedParent,
+            "Child",
+            "Desc",
+            today.plusDays(5),
+            today.plusDays(10),
+            GoalStatusEnum.WAITING
+        );
+        Goal savedChild = goalRepository.save(child);
+        savedParent.getSubGoals().add(savedChild);
+        goalRepository.save(savedParent);
+        goalRepository.flush();
+
+        var request = new GoalUpdateRequestDto(
+            "Parent",
+            "Desc",
+            today.plusDays(8),
+            today.plusDays(10)
+        );
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedParent.getId(), request))
+                .isInstanceOf(GoalStartDateViolationException.class);
     }
 }
