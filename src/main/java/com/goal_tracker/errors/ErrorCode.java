@@ -68,6 +68,24 @@ public enum ErrorCode {
     ERR_GOAL_STATUS_NOT_FOUND("The provided goal status identifier is invalid."),
 
     /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to modify the start date of a goal that is already in progress.
+     */
+    ERR_GOAL_START_DATE_IMMUTABLE("Cannot modify the start date of a goal that is already in progress."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to modify the end date of a goal that is currently paused.
+     */
+    ERR_GOAL_END_DATE_IMMUTABLE("Cannot modify the end date of a goal that is currently paused."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set or leave the start date as null for a goal that requires it.
+     */
+    ERR_GOAL_START_DATE_REQUIRED("The start date cannot be null for a goal that is in progress or paused."),
+
+    /**
      * HTTP 401 - Unauthorized.
      * Occurs when the request lacks valid authentication credentials,
      * the token has expired, or the provided access data is incorrect.
