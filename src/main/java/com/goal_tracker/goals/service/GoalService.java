@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
+import com.goal_tracker.goals.dto.GoalStatusHistoryResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.entity.Goal;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
@@ -24,6 +25,7 @@ import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
 import com.goal_tracker.goals.mapper.GoalMapper;
+import com.goal_tracker.goals.mapper.GoalStatusHistoryMapper;
 import com.goal_tracker.goals.repository.GoalRepository;
 import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
 
@@ -36,6 +38,7 @@ public class GoalService {
     private final GoalRepository goalRepository;
     private final GoalStatusHistoryRepository goalStatusHistoryRepository;
     private final GoalMapper goalMapper;
+    private final GoalStatusHistoryMapper goalStatusHistoryMapper;
 
     /**
      * Constructs a new {@code GoalService} with the required dependencies.
@@ -44,11 +47,12 @@ public class GoalService {
      * @param goalStatusHistoryRepository the repository for managing goal status history persistence and database operations
      * @param goalMapper                  the mapper used for converting between goal entities and data transfer objects
      */
-    public GoalService(GoalRepository goalRepository, GoalStatusHistoryRepository goalStatusHistoryRepository, GoalMapper goalMapper) {
+    public GoalService(GoalRepository goalRepository, GoalStatusHistoryRepository goalStatusHistoryRepository, GoalMapper goalMapper,  GoalStatusHistoryMapper goalStatusHistoryMapper) {
         super();
         this.goalRepository = goalRepository;
         this.goalStatusHistoryRepository = goalStatusHistoryRepository;
         this.goalMapper = goalMapper;
+        this.goalStatusHistoryMapper = goalStatusHistoryMapper;
     }
 
     /**
@@ -453,5 +457,35 @@ public class GoalService {
         Goal goalTree = goalRepository.findWithSubGoalsByIdAndUserId(goalId,userId).get();
 
         return goalMapper.toTreeResponse(goalTree);
+    }
+
+    /**
+     * Retrieves the chronological timeline of status changes for a specific goal.
+     * <p>
+     * It validates that the goal exists, enforces strict ownership security constraints,
+     * and fetches the status history records ordered by date.
+     * </p>
+     *
+     * @param userId The unique identifier of the authenticated user owning the goal.
+     * @param goalId The unique identifier of the target goal.
+     * @return A list of {@link GoalStatusHistoryResponseDto} representing the status change timeline.
+     * @throws GoalNotFoundException  if the goal does not exist.
+     * @throws GoalOwnershipException if the goal does not belong to the authenticated user.
+     */
+    @Transactional(readOnly = true)
+    public List<GoalStatusHistoryResponseDto> getGoalHistory(Long userId, Long goalId) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new GoalNotFoundException(goalId));
+
+        if (!goal.getUserId().equals(userId)) {
+            throw new GoalOwnershipException(goalId, userId);
+        }
+
+        List<GoalStatusHistory> histories = goalStatusHistoryRepository
+            .findByGoalIdAndUserIdRecentFirst(goalId, userId);
+
+        return histories.stream()
+            .map(goalStatusHistoryMapper::toResponse)
+            .toList();
     }
 }
