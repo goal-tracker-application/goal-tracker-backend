@@ -61,6 +61,11 @@ public enum ErrorCode {
      */
     ERR_INVALID_GOAL_TRANSITION("The requested goal status transition is not allowed."),
 
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when the provided goal status identifier is invalid or not found.
+     */
+    ERR_GOAL_STATUS_NOT_FOUND("The provided goal status identifier is invalid."),
 
     /**
      * HTTP 401 - Unauthorized.
