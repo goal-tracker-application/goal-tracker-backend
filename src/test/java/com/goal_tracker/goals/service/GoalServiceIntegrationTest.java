@@ -26,6 +26,7 @@ import com.goal_tracker.goals.exceptions.GoalNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalOwnershipException;
 import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
+import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
 import com.goal_tracker.goals.repository.GoalRepository;
 import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
@@ -784,5 +785,54 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> goalService.changeGoalStatus(testUser.getId(), savedGoal.getId(), request))
                 .isInstanceOf(IllegalGoalTransitionException.class);
+    }
+
+    /**
+     * Verifies that retrieving root goals with a valid status filter successfully returns matching root goals.
+     */
+    @Test
+    @DisplayName("getRootGoals: Should successfully return filtered root goals when valid status ID is provided")
+    void getRootGoalsSuccessWithFilteredResults() {
+        LocalDate futureDate = LocalDate.now().plusDays(5);
+        Goal goal = new Goal(
+                testUser.getId(),
+                null,
+                "Root WAITING Goal",
+                "Desc",
+                futureDate,
+                futureDate.plusDays(10),
+                GoalStatusEnum.WAITING
+        );
+        goalRepository.save(goal);
+        goalRepository.flush();
+
+        var result = goalService.getRootGoals(testUser.getId(), GoalStatusEnum.WAITING.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).title()).isEqualTo("Root WAITING Goal");
+    }
+
+    /**
+     * Verifies that retrieving root goals returns an empty list when no root goals match the filter criteria[cite: 8].
+     */
+    @Test
+    @DisplayName("getRootGoals: Should successfully return an empty list when no root goals match the status filter")
+    void getRootGoalsSuccessEmptyList() {
+        var result = goalService.getRootGoals(testUser.getId(), GoalStatusEnum.COMPLETED.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result).isEmpty();
+    }
+
+    /**
+     * Verifies that attempting to retrieve root goals with an invalid status identifier throws a GoalStatusNotFoundException[cite: 8].
+     */
+    @Test
+    @DisplayName("getRootGoals: Should throw GoalStatusNotFoundException when invalid status ID is provided")
+    void getRootGoalsThrowsGoalStatusNotFoundException() {
+        assertThatThrownBy(() -> goalService.getRootGoals(testUser.getId(), 99999))
+                .isInstanceOf(GoalStatusNotFoundException.class)
+                .hasMessageContaining("Goal status with ID 99999 was not found.");
     }
 }
