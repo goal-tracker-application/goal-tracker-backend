@@ -19,13 +19,13 @@ import org.hibernate.annotations.Immutable;
 public class StatusTransitionCause {
 
     /**
-     * Unique numerical identifier for the transition cause (1: USER, 2: UPWARD_CASCADE, 3: DOWNWARD_CASCADE).
+     * Unique numerical identifier for the transition cause (1: CREATION, 2: USER, 3: UPWARD_CASCADE, 4: DOWNWARD_CASCADE, 5: AUTO_ACTIVATION, 6: AUTO_FAILURE).
      */
     @Id
     private Integer id;
 
     /**
-     * Unique name of the transition cause (e.g., 'USER', 'UPWARD_CASCADE', 'DOWNWARD_CASCADE').
+     * Unique name of the transition cause (e.g.,'CREATION', 'USER', 'UPWARD_CASCADE', 'DOWNWARD_CASCADE', 'AUTO_ACTIVATION', 'AUTO_FAILURE').
      */
     @Column(nullable = false, unique = true, length = 50)
     private String name;
