@@ -27,7 +27,7 @@ public class GoalStatusHistory {
     /**
      * The goal to which this history record belongs.
      */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY,cascade = CascadeType.ALL, optional = false)
     @JoinColumn(name = "goal_id", nullable = false)
     private Goal goal;
 
