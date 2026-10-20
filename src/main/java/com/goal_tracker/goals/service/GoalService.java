@@ -414,11 +414,27 @@ public class GoalService {
     }
 
     /**
-     * Handles terminal state transitions (COMPLETED, FAILED, DISCARDED) and downward cascade.
+     * Handles terminal state transitions (COMPLETED, FAILED, DISCARDED) and cascades 
+     * the closure downwards to all eligible sub-goals.
+     *
+     * @param goal         the target goal entity undergoing the terminal state change
+     * @param targetStatus the desired terminal status enum (e.g., FAILED, COMPLETED, DISCARDED)
+     * @param cause        the strongly-typed cause of the transition (e.g., USER, AUTO_FAILURE, DOWNWARD_CASCADE)
+     * @param notes        optional notes or context describing the reason for the transition
      */
     private void handleTerminalTransition(Goal goal, GoalStatusEnum targetStatus, StatusTransitionCauseEnum cause, String notes) {
         goal.setStatus(targetStatus);
-        goalStatusHistoryRepository.save(new GoalStatusHistory(goal, targetStatus, cause, notes, OffsetDateTime.now()));
+        goalStatusHistoryRepository.save
+        (
+            new GoalStatusHistory
+            (
+                goal, 
+                targetStatus, 
+                cause, 
+                notes, 
+                OffsetDateTime.now()
+            )
+        );
 
         cascadeTerminalToChildren(goal);
     }
@@ -434,7 +450,16 @@ public class GoalService {
                 childStatus != GoalStatusEnum.DISCARDED) {
                 
                 child.setStatus(GoalStatusEnum.DISCARDED);
-                goalStatusHistoryRepository.save(new GoalStatusHistory(child, GoalStatusEnum.DISCARDED, StatusTransitionCauseEnum.DOWNWARD_CASCADE, "Set into DISCARDED by parent closure cascade", OffsetDateTime.now()));
+                goalStatusHistoryRepository.save
+                (
+                    new GoalStatusHistory(
+                        child, 
+                        GoalStatusEnum.DISCARDED, 
+                        StatusTransitionCauseEnum.DOWNWARD_CASCADE, 
+                        null,
+                        OffsetDateTime.now()
+                    )
+                );
                 goalRepository.save(child);
                 
                 cascadeTerminalToChildren(child);
@@ -747,5 +772,46 @@ public class GoalService {
             handleTransitionToInProgress(goal,goal.getStatus(),null,StatusTransitionCauseEnum.AUTO_ACTIVATION);
             goalRepository.save(goal);
         }
+    }
+
+    /**
+     * Automatically marks expired IN_PROGRESS goals as FAILED from bottom to top,
+     * recording an AUTO_FAILURE history event and cascading terminal closures downwards.
+     * Paused goals are naturally omitted by the repository query.
+     */
+    @Transactional
+    public void expireScheduledGoals() {
+        List<Goal> expiredGoals = goalRepository.findExpiredGoals();
+
+        expiredGoals.sort((g1, g2) -> Integer.compare(getGoalDepth(g2), getGoalDepth(g1)));
+
+        for (Goal goal : expiredGoals) {
+            if (goal.getStatus() == GoalStatusEnum.IN_PROGRESS) {
+                handleTerminalTransition(
+                    goal, 
+                    GoalStatusEnum.FAILED, 
+                    StatusTransitionCauseEnum.AUTO_FAILURE, 
+                    null
+                );
+                goalRepository.save(goal);
+            }
+        }
+    }
+
+   /**
+     * Helper method to calculate the depth of a goal in the hierarchy tree.
+     * Used for bottom-up ordering during expiration processing.
+     *
+     * @param goal the target goal entity whose depth is being calculated
+     * @return the calculated depth as an integer (0 for root goals, 1 for direct children, and so on)
+     */
+    private int getGoalDepth(Goal goal) {
+        int depth = 0;
+        Goal current = goal.getParent();
+        while (current != null) {
+            depth++;
+            current = current.getParent();
+        }
+        return depth;
     }
 }
