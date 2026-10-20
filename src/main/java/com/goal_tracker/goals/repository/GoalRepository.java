@@ -90,10 +90,12 @@ public interface GoalRepository extends JpaRepository<Goal, Long> {
     int updateGoalStatus(@Param("id") Long id, @Param("userId") Long userId, @Param("status") GoalStatusEnum status);
 
     /**
-     * Deletes a specific goal ensuring secure multi-tenant isolation against IDOR vulnerabilities.
+     * Deletes a goal directly by its unique identifier using a bulk delete query,
+     * automatically flushing and clearing the persistence context to avoid stale cache states.
      *
-     * @param id     The goal identifier.
-     * @param userId The owner user identifier.
+     * @param goalId the numeric identifier of the goal to delete
      */
-    void deleteByIdAndUserId(Long id, Long userId);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Goal g WHERE g.id = :goalId")
+    void deleteGoalCustomById(@Param("goalId") Long goalId);
 }
