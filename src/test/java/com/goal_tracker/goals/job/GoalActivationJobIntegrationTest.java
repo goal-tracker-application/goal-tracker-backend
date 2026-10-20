@@ -74,7 +74,7 @@ class GoalActivationJobIntegrationTest extends AbstractIntegrationTest {
      */
     @Test
     @DisplayName("Should activate single root goal when start date is today or past")
-    void runGoalActivation_SingleRootGoal_Success() {
+    void runGoalActivationSingleRootGoalSuccess() {
         // Arrange
         Goal rootGoal = createAndSaveGoalWithHistory(
             "Single Root Goal", 
@@ -110,7 +110,7 @@ class GoalActivationJobIntegrationTest extends AbstractIntegrationTest {
      */
     @Test
     @DisplayName("Should activate parent goal and propagate IN_PROGRESS downwards to waiting children")
-    void runGoalActivation_ParentGoal_PropagatesDownwards() {
+    void runGoalActivationParentGoalPropagatesDownwards() {
         // Arrange
         Goal parent = createAndSaveGoalWithHistory(
             "Parent Goal", 
@@ -151,13 +151,74 @@ class GoalActivationJobIntegrationTest extends AbstractIntegrationTest {
         assertThat(childHistory.get(1).getCause()).isEqualTo(StatusTransitionCauseEnum.DOWNWARD_CASCADE);
     }
 
+
+    /**
+     * Tests that activating a parent goal correctly propagates the IN_PROGRESS status
+     * downwards to its waiting children with same startDate via DOWNWARD_CASCADE.
+     */
+    @Test
+    @DisplayName("Should activate parent goal and propagate IN_PROGRESS downwards to waiting children with same startDate")
+    void runGoalActivationParentGoalPropagatesDownwardsWithSameStartDate() {
+        // Arrange
+        Goal parent = createAndSaveGoalWithHistory(
+            "Parent Goal", 
+            GoalStatusEnum.WAITING, 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(15), 
+            null
+        );
+
+        Goal child = createAndSaveGoalWithHistory(
+            "Child Goal 1", 
+            GoalStatusEnum.WAITING, 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(10), 
+            parent
+        );
+
+        Goal grandChild = createAndSaveGoalWithHistory(
+            "Grand Child Goal", 
+            GoalStatusEnum.WAITING, 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(10), 
+            child
+        );
+
+        entityManager.flush();
+        entityManager.clear();
+
+        // Act
+        goalActivationJob.runGoalActivation();
+
+        entityManager.flush();
+        entityManager.clear();
+
+        // Assert
+        Goal updatedParent = goalRepository.findById(parent.getId()).orElseThrow();
+        Goal updatedChild = goalRepository.findById(child.getId()).orElseThrow();
+        Goal updatedGrandChild = goalRepository.findById(grandChild.getId()).orElseThrow();
+
+        assertThat(updatedParent.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+        assertThat(updatedGrandChild.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
+
+        List<GoalStatusHistory> parentHistory = goalStatusHistoryRepository.findByGoalIdAndUserIdOrdered(parent.getId(), testUser.getId());
+        assertThat(parentHistory.get(1).getCause()).isEqualTo(StatusTransitionCauseEnum.AUTO_ACTIVATION);
+
+        List<GoalStatusHistory> childHistory = goalStatusHistoryRepository.findByGoalIdAndUserIdOrdered(child.getId(), testUser.getId());
+        assertThat(childHistory.get(1).getCause()).isEqualTo(StatusTransitionCauseEnum.DOWNWARD_CASCADE);
+
+        List<GoalStatusHistory> grandChildHistory = goalStatusHistoryRepository.findByGoalIdAndUserIdOrdered(grandChild.getId(), testUser.getId());
+        assertThat(grandChildHistory.get(1).getCause()).isEqualTo(StatusTransitionCauseEnum.DOWNWARD_CASCADE);
+    }
+
     /**
      * Tests that activating a child goal successfully triggers upward propagation
      * to a flexible parent goal with null dates, updating its start date and setting it to IN_PROGRESS.
      */
     @Test
     @DisplayName("Should activate child goal and propagate upwards to parent with null dates")
-    void runGoalActivation_ChildGoalWithNullDateParent_PropagatesUpwards() {
+    void runGoalActivationChildGoalWithNullDateParentPropagatesUpwards() {
         // Arrange
         Goal parentWithNullDates = createAndSaveGoalWithHistory(
             "Flexible Parent Goal", 
@@ -195,14 +256,13 @@ class GoalActivationJobIntegrationTest extends AbstractIntegrationTest {
         List<GoalStatusHistory> parentHistory = goalStatusHistoryRepository.findByGoalIdAndUserIdOrdered(parentWithNullDates.getId(), testUser.getId());
         assertThat(parentHistory.get(1).getCause()).isEqualTo(StatusTransitionCauseEnum.UPWARD_CASCADE);
     }
-
     /**
      * Tests that activating an intermediate node within a three-level hierarchy
      * correctly propagates progress both upwards to the grandparent and downwards to the leaf node.
      */
     @Test
     @DisplayName("Should activate intermediate node and propagate both upwards and downwards")
-    void runGoalActivation_IntermediateNode_PropagatesUpAndDown() {
+    void runGoalActivationIntermediateNodePropagatesUpAndDown() {
         // Arrange
         Goal grandparent = createAndSaveGoalWithHistory(
             "Grandparent Goal", 
@@ -262,7 +322,7 @@ class GoalActivationJobIntegrationTest extends AbstractIntegrationTest {
      */
     @Test
     @DisplayName("Should NOT activate goals with future start dates (No-Intervention scenario)")
-    void runGoalActivation_FutureGoal_RemainsWaiting() {
+    void runGoalActivationFutureGoalRemainsWaiting() {
         // Arrange
         Goal futureGoal = createAndSaveGoalWithHistory(
             "Future Goal", 
