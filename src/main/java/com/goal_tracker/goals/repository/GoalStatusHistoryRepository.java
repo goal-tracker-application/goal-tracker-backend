@@ -2,6 +2,7 @@ package com.goal_tracker.goals.repository;
 
 import com.goal_tracker.goals.entity.GoalStatusHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -48,4 +49,14 @@ public interface GoalStatusHistoryRepository extends JpaRepository<GoalStatusHis
      */
     @Query("SELECT h FROM GoalStatusHistory h WHERE h.goal.id = :goalId AND h.goal.userId = :userId ORDER BY h.changedAt DESC")
     List<GoalStatusHistory> findByGoalIdAndUserIdRecentFirst(@Param("goalId") Long goalId, @Param("userId") Long userId);
+
+    /**
+     * Deletes all status history records associated with a specific goal by its unique identifier.
+     * Uses a bulk delete query to bypass entity lifecycle states and prevent transient persistence exceptions.
+     *
+     * @param goalId the numeric identifier of the goal whose history records are to be deleted
+     */
+    @Modifying
+    @Query("DELETE FROM GoalStatusHistory h WHERE h.goal.id = :goalId")
+    void deleteByGoalId(@Param("goalId") Long goalId);
 }
