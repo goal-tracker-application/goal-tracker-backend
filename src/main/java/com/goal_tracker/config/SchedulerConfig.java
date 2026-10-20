@@ -1,4 +1,4 @@
-package com.goal_tracker.goals.config;
+package com.goal_tracker.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
