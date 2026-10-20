@@ -2,6 +2,7 @@ package com.goal_tracker.config.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -65,9 +66,11 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**").permitAll()
+                        // Endpoints públicos
+                        .requestMatchers("/auth/register", "/auth/login", "/auth/guest").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-
+                        .requestMatchers(HttpMethod.PATCH, "/auth/password").authenticated()
+                        .requestMatchers("/goals/**").authenticated()
                         .anyRequest().authenticated()
                 )
 
