@@ -38,12 +38,6 @@ import com.goal_tracker.goals.entity.GoalStatusEnum;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.service.GoalService;
 
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.cfg.CoercionAction;
-import tools.jackson.databind.cfg.CoercionInputShape;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.type.LogicalType;
-
 /**
  * Unit tests for {@link GoalController}.
  * <p>
@@ -57,8 +51,6 @@ class GoalControllerUnitTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @MockitoBean
     private GoalService goalService;
@@ -83,12 +75,6 @@ class GoalControllerUnitTest {
         mockMvc = MockMvcBuilders.standaloneSetup(goalController)
             .setControllerAdvice(new GlobalExceptionHandler())
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-            .build();
-
-        objectMapper = JsonMapper.builder()
-            .withCoercionConfig(LogicalType.Integer, config -> 
-                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail)
-            )
             .build();
         SecurityContextHolder.clearContext();
     }
