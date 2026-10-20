@@ -11,19 +11,34 @@ package com.goal_tracker.goals.entity;
 public enum StatusTransitionCauseEnum {
 
     /**
+     * Automatic transition triggered on goal creation
+     */
+    CREATION(1),
+
+    /**
      * Direct transition triggered explicitly by the user.
      */
-    USER(1),
+    USER(2),
 
     /**
      * Automatic transition triggered upwards by an event on a child goal.
      */
-    UPWARD_CASCADE(2),
+    UPWARD_CASCADE(3),
 
     /**
      * Automatic transition triggered downwards by an event on a parent goal.
      */
-    DOWNWARD_CASCADE(3);
+    DOWNWARD_CASCADE(4),
+
+    /**
+     * Automatic transition triggered when the goal automatically starts based on schedule.
+     */
+    AUTO_ACTIVATION(5),
+
+    /**
+     * Automatic transition triggered when the goal fails due to expiration or unmet deadlines.
+     */
+    AUTO_FAILURE(6);
 
     /**
      * The internal numerical identifier stored in the database column.
