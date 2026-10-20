@@ -115,6 +115,10 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
 
         Goal savedGoal = goalRepository.findById(response.id()).orElseThrow();
         assertThat(savedGoal.getUserId()).isEqualTo(testUser.getId());
+
+        GoalStatusHistory creationRegister = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(savedGoal.getId(), savedGoal.getUserId()).getFirst();
+        assertThat(creationRegister.getCause()).isEqualTo(StatusTransitionCauseEnum.CREATION);
+
     }
 
     /**
@@ -140,6 +144,9 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         // Assert
         assertThat(response).isNotNull();
         assertThat(response.statusId()).isEqualTo(GoalStatusEnum.IN_PROGRESS.getId());
+
+        GoalStatusHistory creationRegister = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(response.id(), testUser.getId()).getFirst();
+        assertThat(creationRegister.getCause()).isEqualTo(StatusTransitionCauseEnum.CREATION);
     }
 
     /**
@@ -163,6 +170,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         GoalCreateRequestDto request = new GoalCreateRequestDto(
                 "Subtask 1",
                 "Specific subtask",
@@ -178,6 +196,9 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(response).isNotNull();
         assertThat(response.parentId()).isEqualTo(parent.getId());
         assertThat(response.statusId()).isEqualTo(GoalStatusEnum.WAITING.getId());
+
+        GoalStatusHistory creationRegister = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(response.id(), testUser.getId()).getFirst();
+        assertThat(creationRegister.getCause()).isEqualTo(StatusTransitionCauseEnum.CREATION);
     }
 
     /**
@@ -200,6 +221,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         GoalCreateRequestDto request = new GoalCreateRequestDto(
                 "Urgent Subgoal",
                 "Needs to start right now",
@@ -214,11 +246,14 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(response).isNotNull();
         assertThat(response.statusId()).isEqualTo(GoalStatusEnum.IN_PROGRESS.getId());
 
+        GoalStatusHistory creationRegister = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(response.id(), testUser.getId()).getFirst();
+        assertThat(creationRegister.getCause()).isEqualTo(StatusTransitionCauseEnum.CREATION);
+
         Goal updatedParent = goalRepository.findById(parent.getId()).orElseThrow();
         assertThat(updatedParent.getStatus()).isEqualTo(GoalStatusEnum.IN_PROGRESS);
         assertThat(updatedParent.getStartDate()).isEqualTo(today);
 
-        var histories = goalStatusHistoryRepository.findById(updatedParent.getId());
+        var histories = goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(updatedParent.getId(), updatedParent.getUserId());
         assertThat(histories).isNotEmpty();
         boolean hasCascadedHistory = histories.stream()
                 .anyMatch(h -> h.getCause() != null && h.getCause()== StatusTransitionCauseEnum.UPWARD_CASCADE);
@@ -269,6 +304,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         foreignParent = goalRepository.save(foreignParent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                foreignParent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         GoalCreateRequestDto request = new GoalCreateRequestDto(
                 "Steal Subgoal",
                 "Trying to attach to someone else's goal",
@@ -303,6 +349,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         parent = goalRepository.save(parent);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         // Subgoal tries to start BEFORE parent
         GoalCreateRequestDto request = new GoalCreateRequestDto(
@@ -339,6 +396,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         // Subgoal tries to end AFTER parent
         GoalCreateRequestDto request = new GoalCreateRequestDto(
                 "Late Subgoal",
@@ -373,6 +441,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         var request = new GoalStatusChangeRequestDto(GoalStatusEnum.IN_PROGRESS.getId(), "Starting now");
 
         var response = goalService.changeGoalStatus(testUser.getId(), goal.getId(), request);
@@ -400,6 +479,18 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         parent = goalRepository.save(parent);
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+
         LocalDate futureDate = LocalDate.now().plusDays(2);
         Goal child = new Goal
         (
@@ -413,6 +504,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         child = goalRepository.save(child);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalStatusChangeRequestDto(GoalStatusEnum.IN_PROGRESS.getId(), "Activate child");
 
@@ -449,6 +551,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(2)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalStatusHistoryRepository.save
         (
             new GoalStatusHistory
@@ -474,6 +587,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         child = goalRepository.save(child);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(2)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         goalStatusHistoryRepository.save
         (
@@ -527,6 +651,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal activeChild = new Goal
         (
             testUser.getId(), 
@@ -542,6 +677,16 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
 
         parent.getSubGoals().add(activeChild);
         
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                activeChild,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         Goal completedChild = new Goal
         (
@@ -559,6 +704,28 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent.getSubGoals().add(completedChild);
         goalRepository.save(parent);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                activeChild,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                activeChild,
+                GoalStatusEnum.COMPLETED,
+                StatusTransitionCauseEnum.USER,
+                "Completed",
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalStatusChangeRequestDto(GoalStatusEnum.DISCARDED.getId(), "Abort project");
 
@@ -594,6 +761,18 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+
         Goal child = new Goal
         (
             testUser.getId(), 
@@ -611,6 +790,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goalRepository.save(parent);
         goalRepository.flush();
 
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalStatusChangeRequestDto(GoalStatusEnum.PAUSED.getId(), "Taking a break");
 
@@ -646,6 +836,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
 
         Goal child = new Goal
         (
@@ -660,6 +861,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         child = goalRepository.save(child);
         goalRepository.flush();
         
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         parent.getSubGoals().add(child);
         goalRepository.save(parent);
         goalRepository.flush();
@@ -681,6 +893,16 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goalRepository.save(child);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                grandChild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalStatusChangeRequestDto(GoalStatusEnum.IN_PROGRESS.getId(), "Start work");
 
@@ -720,6 +942,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(6)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalStatusHistoryRepository.save
         (
             new GoalStatusHistory
@@ -743,6 +976,18 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
             GoalStatusEnum.PAUSED
         );
         systemPausedChild = goalRepository.save(systemPausedChild);
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                systemPausedChild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(6)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalStatusHistoryRepository.save
         (
             new GoalStatusHistory
@@ -768,6 +1013,18 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         userPausedChild = goalRepository.save(userPausedChild);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                userPausedChild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(6)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalStatusHistoryRepository.save
         (
             new GoalStatusHistory(
@@ -934,6 +1191,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal child = new Goal(
                 testUser.getId(),
                 parent,
@@ -949,6 +1217,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent.getSubGoals().add(child);
         goalRepository.save(parent);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var result = goalService.getGoalTree(testUser.getId(), parent.getId());
 
@@ -977,6 +1256,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         goal = goalRepository.save(goal);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var result = goalService.getGoalTree(testUser.getId(), goal.getId());
 
@@ -1014,6 +1304,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         Goal savedForeignGoal = goalRepository.save(foreignGoal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedForeignGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         assertThatThrownBy(() -> goalService.getGoalTree(testUser.getId(), savedForeignGoal.getId()))
                 .isInstanceOf(GoalOwnershipException.class)
                 .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d.", foreignGoal.getId(), testUser.getId()));
@@ -1037,6 +1338,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         GoalStatusHistory history = new GoalStatusHistory(
                 goal,
                 GoalStatusEnum.IN_PROGRESS,
@@ -1050,8 +1362,9 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         var result = goalService.getGoalHistory(testUser.getId(), goal.getId());
 
         assertThat(result).isNotNull();
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).cause()).isEqualTo(StatusTransitionCauseEnum.USER.name());
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).cause()).isEqualTo(StatusTransitionCauseEnum.CREATION.name());
+        assertThat(result.get(1).cause()).isEqualTo(StatusTransitionCauseEnum.USER.name());
     }
 
     /**
@@ -1065,17 +1378,28 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
                 null,
                 "No History Goal",
                 "Desc",
-                LocalDate.now(),
+                LocalDate.now().plusDays(1),
                 LocalDate.now().plusDays(5),
                 GoalStatusEnum.WAITING
         );
         goal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         var result = goalService.getGoalHistory(testUser.getId(), goal.getId());
 
         assertThat(result).isNotNull();
-        assertThat(result).isEmpty();
+        assertThat(result).hasSize(1);
     }
 
     /**
@@ -1107,6 +1431,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         Goal savedForeignGoal = goalRepository.save(foreignGoal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedForeignGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         assertThatThrownBy(() -> goalService.getGoalHistory(testUser.getId(), savedForeignGoal.getId()))
                 .isInstanceOf(GoalOwnershipException.class)
                 .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d", foreignGoal.getId(), testUser.getId()));
@@ -1130,6 +1465,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         goal = goalRepository.save(goal);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto(
             "Updated Title",
@@ -1164,6 +1510,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal child = new Goal(
             testUser.getId(),
             parent,
@@ -1177,6 +1534,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent.getSubGoals().add(child);
         goalRepository.save(parent);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto(
             "Updated Parent",
@@ -1208,6 +1576,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         goal = goalRepository.save(goal);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto(
             "New Title",
@@ -1241,6 +1620,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         goal = goalRepository.save(goal);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto(
             "Active Goal",
@@ -1277,6 +1667,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal child = new Goal(
             testUser.getId(),
             goal,
@@ -1290,6 +1691,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goal.getSubGoals().add(child);
         goalRepository.save(goal);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
 
         Goal grandChild =  new Goal(
@@ -1305,6 +1717,18 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         child.getSubGoals().add(grandChild);
         goalRepository.save(child);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                grandChild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         var request = new GoalUpdateRequestDto(
             "Waiting Goal",
             "Desc",
@@ -1349,6 +1773,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(8)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalStatusHistoryRepository.save(new GoalStatusHistory(
             goal,
             GoalStatusEnum.PAUSED,
@@ -1371,11 +1806,22 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(8)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalStatusHistoryRepository.save(new GoalStatusHistory(
             child,
             GoalStatusEnum.PAUSED,
             StatusTransitionCauseEnum.DOWNWARD_CASCADE,
-            "Cascaded pause",
+            null,
             OffsetDateTime.now().minusDays(6)
         ));
 
@@ -1392,6 +1838,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         child.getSubGoals().add(grandChild);
         goalRepository.save(child);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                grandChild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(8)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         goalStatusHistoryRepository.save(new GoalStatusHistory(
             grandChild,
@@ -1443,6 +1900,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         grandfather = goalRepository.save(grandfather);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                grandfather,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(8)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal parent = new Goal(
             testUser.getId(),
             grandfather,
@@ -1456,6 +1924,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         grandfather.getSubGoals().add(parent);
         goalRepository.save(grandfather);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(8)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         LocalDate futureDate = today.plusDays(5);
         Goal child = new Goal(
@@ -1471,6 +1950,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         parent.getSubGoals().add(child);
         goalRepository.save(parent);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(8)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto(
             "Child Goal",
@@ -1535,6 +2025,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         Goal savedForeignGoal = goalRepository.save(foreignGoal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedForeignGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         var request = new GoalUpdateRequestDto("Title", "Desc", today, today.plusDays(5));
 
         assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedForeignGoal.getId(), request))
@@ -1559,6 +2060,28 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         Goal savedGoal = goalRepository.save(goal);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(2)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.USER,
+                "Completed",
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto("New Title", "Desc", today, today.plusDays(5));
 
@@ -1585,6 +2108,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         Goal savedGoal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         var request = new GoalUpdateRequestDto("Title", "Desc", today.plusDays(1), today.plusDays(5));
 
         assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
@@ -1608,6 +2142,16 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
             GoalStatusEnum.PAUSED
         );
         Goal savedGoal = goalRepository.save(goal);
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(2)
+            )
+        );
+        goalStatusHistoryRepository.flush();
         
         goalStatusHistoryRepository.save(new GoalStatusHistory(
             savedGoal,
@@ -1643,6 +2187,28 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         Goal savedGoal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.PAUSED,
+                StatusTransitionCauseEnum.USER,
+                "paused",
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         var request = new GoalUpdateRequestDto("Title", "Desc", today, today.plusDays(10));
 
         assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
@@ -1668,6 +2234,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         Goal savedParent = goalRepository.save(parent);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedParent,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal child = new Goal(
             testUser.getId(),
             savedParent,
@@ -1681,6 +2258,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         savedParent.getSubGoals().add(savedChild);
         goalRepository.save(savedParent);
         goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedChild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         var request = new GoalUpdateRequestDto(
             "Parent",
@@ -1711,6 +2299,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         goal = goalRepository.save(goal);
         goalRepository.flush();
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         goalService.deleteGoal(testUser.getId(), goal.getId());
 
         assertThat(goalRepository.findById(goal.getId())).isEmpty();
@@ -1733,7 +2332,27 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
             GoalStatusEnum.IN_PROGRESS
         );
         root = goalRepository.save(root);
-        goalStatusHistoryRepository.save(new GoalStatusHistory(root, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.USER, "Created", OffsetDateTime.now()));
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                root,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                root,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.USER,
+                "Started",
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
 
         Goal child = new Goal(
             testUser.getId(),
@@ -1746,7 +2365,26 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         child = goalRepository.save(child);
         root.getSubGoals().add(child);
-        goalStatusHistoryRepository.save(new GoalStatusHistory(child, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.DOWNWARD_CASCADE, "Cascaded", OffsetDateTime.now()));
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                child, 
+                GoalStatusEnum.IN_PROGRESS, 
+                StatusTransitionCauseEnum.DOWNWARD_CASCADE, 
+                null, 
+                OffsetDateTime.now()
+            )
+        );
 
         Goal grandchild = new Goal(
             testUser.getId(),
@@ -1759,7 +2397,27 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         grandchild = goalRepository.save(grandchild);
         child.getSubGoals().add(grandchild);
-        goalStatusHistoryRepository.save(new GoalStatusHistory(grandchild, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.DOWNWARD_CASCADE, "Cascaded", OffsetDateTime.now()));
+        
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                grandchild,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                grandchild,
+                GoalStatusEnum.IN_PROGRESS, 
+                StatusTransitionCauseEnum.DOWNWARD_CASCADE,
+                null, 
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
         goalRepository.save(root);
         goalRepository.flush();
 
@@ -1788,6 +2446,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         parent = goalRepository.save(parent);
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                parent,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
         Goal intermediate = new Goal(
             testUser.getId(),
             parent,
@@ -1804,8 +2473,8 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
             new GoalStatusHistory(
                 intermediate, 
                 GoalStatusEnum.IN_PROGRESS, 
-                StatusTransitionCauseEnum.USER, 
-                "Created", 
+                StatusTransitionCauseEnum.CREATION, 
+                null, 
                 OffsetDateTime.now()
             )
         );
@@ -1821,6 +2490,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         );
         leaf = goalRepository.save(leaf);
         intermediate.getSubGoals().add(leaf);
+        goalStatusHistoryRepository.save
+        (
+            new GoalStatusHistory(
+                leaf, 
+                GoalStatusEnum.WAITING, 
+                StatusTransitionCauseEnum.CREATION, 
+                null, 
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
         goalStatusHistoryRepository.save
         (
             new GoalStatusHistory
@@ -1874,6 +2554,18 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
             GoalStatusEnum.IN_PROGRESS
         );
         Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalStatusHistoryRepository.save
+        (
+            new GoalStatusHistory(
+                savedForeignGoal, 
+                GoalStatusEnum.IN_PROGRESS, 
+                StatusTransitionCauseEnum.CREATION, 
+                null, 
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+        
         goalRepository.flush();
 
         assertThatThrownBy(() -> goalService.deleteGoal(testUser.getId(), savedForeignGoal.getId()))
