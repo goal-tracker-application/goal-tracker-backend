@@ -7,6 +7,7 @@ import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
+import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.entity.Goal;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
 import com.goal_tracker.goals.entity.GoalStatusHistory;
@@ -369,5 +370,82 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
     }
-    
+
+    /**
+     * Test to verify that an authenticated user can successfully create a root goal via POST /goals.
+     * <p>
+     * Sets up a valid user, injects authentication context, performs a POST request with a valid goal payload,
+     * and expects a 201 Created response along with the generated goal details.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to create root goal via POST /goals")
+    void shouldAllowAuthenticatedAccessToCreateRootGoal() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, java.util.Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto requestDto = new GoalCreateRequestDto(
+            "New Integration Root Goal",
+            "Integration test description",
+            LocalDate.now(),
+            LocalDate.now().plusDays(10),
+            null
+        );
+
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isCreated())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.title").value("New Integration Root Goal"))
+                .andExpect(jsonPath("$.parentId").isEmpty());
+    }
+
+    /**
+     * Test to verify that unauthenticated requests to create a root goal via POST /goals are denied.
+     * <p>
+     * Sends a POST request without any security context or bearer token, expecting a 401 Unauthorized response
+     * along with the standard error structure.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should deny unauthenticated access to create root goal via POST /goals")
+    void shouldDennyUnauthenticatedAccessToCreateRootGoal() throws Exception {
+        GoalCreateRequestDto requestDto = new GoalCreateRequestDto(
+            "New Integration Root Goal",
+            "Integration test description",
+            LocalDate.now(),
+            LocalDate.now().plusDays(10),
+            null
+        );
+
+        mockMvc.perform(post("/goals")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
 }
