@@ -6,6 +6,7 @@ import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.config.security.details.UserPrincipal;
+import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;
 
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -25,11 +27,15 @@ import org.springframework.web.context.WebApplicationContext;
 import java.time.OffsetDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.securityContext;
 
 
 /**
@@ -62,6 +68,7 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
                 .webAppContextSetup(context)
                 .apply(springSecurity())
                 .build();
+        SecurityContextHolder.clearContext();
     }
 
     /**
@@ -158,8 +165,55 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Security Config - Should allow unauthenticated access to /auth/password")
-    void shouldAllowUnauthenticatedAccessToUpdatePassword() throws Exception {
+    @DisplayName("Security Config - Should allow authenticated access to /auth/password")
+    void shouldAllowAuthenticatedAccessToUpdatePassword() throws Exception {
+        
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.save(user);
+        userRepository.flush();
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, java.util.Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+        PasswordUpdateRequest request = new PasswordUpdateRequest("CurrentPass123!", "NewSecurePass123!", "NewSecurePass123!");
+
+        mockMvc.perform(patch("/auth/password")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("Security Config - Should denny authenticated access to /auth/password")
+    void shouldDennyUnauthenticatedAccessToUpdatePassword() throws Exception {
+
+        PasswordUpdateRequest request = new PasswordUpdateRequest("CurrentPass123!", "NewSecurePass123!", "NewSecurePass123!");
+
+        mockMvc.perform(patch("/auth/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+    }
+
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to /goals/roots")
+    void shouldAllowAuthenticatedAccessToListRoots() throws Exception {
         
         String email = "login.security@example.com";
         String rawPassword = "CurrentPass123!";
@@ -178,11 +232,25 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
         );
         SecurityContextHolder.getContext().setAuthentication(auth);
 
-        PasswordUpdateRequest request = new PasswordUpdateRequest("CurrentPass123!", "NewSecurePass123!", "NewSecurePass123!");
+        SecurityContext context = SecurityContextHolder.getContext();
+        mockMvc.perform(get("/goals/roots")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
+    }
 
-        mockMvc.perform(patch("/auth/password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isNoContent());
+    @Test
+    @DisplayName("Security Config - Should denny unauthenticated access to /goals/roots")
+    void shouldDennyUnauthenticatedAccessToListRoots() throws Exception {
+        mockMvc.perform(get("/goals/roots")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
     }
 }
