@@ -1141,6 +1141,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
                 GoalStatusEnum.WAITING
         );
         goalRepository.save(goal);
+
+        Goal filteredGoal =  new Goal(
+                testUser.getId(),
+                null,
+                "Root In progress Goal",
+                "Desc",
+                LocalDate.now(),
+                LocalDate.now().plusDays(10),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        goalRepository.save(filteredGoal);
         goalRepository.flush();
 
         var result = goalService.getRootGoals(testUser.getId(), GoalStatusEnum.WAITING.getId());
@@ -1151,7 +1162,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that retrieving root goals returns an empty list when no root goals match the filter criteria[cite: 8].
+     * Verifies that retrieving root goals returns an empty list when no root goals match the filter criteria.
      */
     @Test
     @DisplayName("getRootGoals: Should successfully return an empty list when no root goals match the status filter")
@@ -1163,7 +1174,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to retrieve root goals with an invalid status identifier throws a GoalStatusNotFoundException[cite: 8].
+     * Verifies that attempting to retrieve root goals with an invalid status identifier throws a GoalStatusNotFoundException.
      */
     @Test
     @DisplayName("getRootGoals: Should throw GoalStatusNotFoundException when invalid status ID is provided")
