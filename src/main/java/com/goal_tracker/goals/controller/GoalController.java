@@ -2,17 +2,21 @@ package com.goal_tracker.goals.controller;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.goal_tracker.config.security.details.UserPrincipal;
+import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.service.GoalService;
@@ -22,6 +26,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 
 /**
  * REST controller for managing goal operations, providing endpoints for
@@ -98,6 +103,33 @@ public class GoalController {
             @AuthenticationPrincipal UserPrincipal principal) {
         GoalTreeResponseDto goalTree = goalService.getGoalTree(principal.id(), goalId);
         return ResponseEntity.ok(goalTree);
+    }
+
+    /**
+     * Creates a new goal for the authenticated user, supporting optional parent goal association 
+     * and hierarchical date validations.
+     *
+     * @param request   the DTO containing goal creation details
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} with HTTP 201 (Created) and the created {@link GoalResponseDto}
+     */
+    @PostMapping
+    @Operation(
+        summary = "Create a new goal",
+        description = "Creates a new goal for the authenticated user, supporting optional parent goal association and hierarchical date validations."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Goal successfully created."),
+        @ApiResponse(responseCode = "400", description = "Validation error, invalid dates, or constraint violations."),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
+        @ApiResponse(responseCode = "403", description = "Access denied due to parent goal ownership mismatch."),
+        @ApiResponse(responseCode = "404", description = "Parent goal not found.")
+    })
+    public ResponseEntity<GoalResponseDto> createGoal(
+            @Valid @RequestBody GoalCreateRequestDto request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        GoalResponseDto response = goalService.createGoal(principal.id(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
 }
