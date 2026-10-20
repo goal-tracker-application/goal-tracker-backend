@@ -93,14 +93,27 @@ public class GoalService {
         goal.setStatus(initialStatus);
 
         Goal savedGoal = goalRepository.save(goal);
+
+
         if(parentGoal!= null){
             parentGoal.getSubGoals().add(savedGoal);
             goalRepository.save(parentGoal);
         }
 
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                goal,
+                initialStatus,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+
         if (initialStatus == GoalStatusEnum.IN_PROGRESS && parentGoal != null) {
             propagateInProgressUpwards(parentGoal, savedGoal.getId(), dto.startDate());
         }
+
 
         return goalMapper.toResponse(savedGoal);
     }
@@ -506,7 +519,7 @@ public class GoalService {
         }
 
         List<GoalStatusHistory> histories = goalStatusHistoryRepository
-            .findByGoalIdAndUserIdRecentFirst(goalId, userId);
+            .findByGoalIdAndUserIdOrdered(goalId, userId);
 
         return histories.stream()
             .map(goalStatusHistoryMapper::toResponse)
