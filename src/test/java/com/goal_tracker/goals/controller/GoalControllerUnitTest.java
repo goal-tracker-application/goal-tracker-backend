@@ -1,11 +1,13 @@
 package com.goal_tracker.goals.controller;
 
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,13 +36,23 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.exceptions.GlobalExceptionHandler;
+import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
+import com.goal_tracker.goals.exceptions.GoalEndDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalOwnershipException;
+import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
+import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.service.GoalService;
+
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.CoercionAction;
+import tools.jackson.databind.cfg.CoercionInputShape;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.type.LogicalType;
 
 /**
  * Unit tests for {@link GoalController}.
@@ -60,6 +73,9 @@ class GoalControllerUnitTest {
 
     private GoalController goalController;
 
+    private ObjectMapper objectMapper;
+
+
     private static final Long TEST_USER_ID = 1L;
 
     /**
@@ -79,6 +95,13 @@ class GoalControllerUnitTest {
             .setControllerAdvice(new GlobalExceptionHandler())
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .build();
+
+        objectMapper = JsonMapper.builder()
+            .withCoercionConfig(LogicalType.Integer, config -> 
+                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+            )
+            .build();
+
         SecurityContextHolder.clearContext();
     }
 
@@ -382,5 +405,401 @@ class GoalControllerUnitTest {
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
 
         verify(goalService).getGoalTree(TEST_USER_ID, otherUserGoalId);
+    }
+
+    /**
+     * Tests successful creation of a root-level goal (without parentId).
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should create root goal successfully when payload is valid")
+    void createGoalShouldCreateRootGoalSuccessfully() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        GoalResponseDto responseDto = new GoalResponseDto(
+            1L, 
+            "New Root Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(10),
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            null,
+            OffsetDateTime.now(),
+            null
+        );
+
+        when(goalService.createGoal(eq(TEST_USER_ID), any())).thenReturn(responseDto);
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "New Root Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(10),
+            null
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.title").value("New Root Goal"))
+                .andExpect(jsonPath("$.parentId").isEmpty());
+
+        verify(goalService).createGoal(eq(TEST_USER_ID), any());
+    }
+
+    /**
+     * Tests successful creation of a child sub-goal associated with a valid parentId.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should create sub-goal successfully when parentId is valid")
+    void createGoalShouldCreateSubGoalSuccessfully() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        GoalResponseDto responseDto = new GoalResponseDto(
+            2L, 
+            "Child Goal", 
+            "Sub description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            1L,
+            OffsetDateTime.now(),
+            null
+        );
+
+        when(goalService.createGoal(eq(TEST_USER_ID), any())).thenReturn(responseDto);
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "Child Goal", 
+            "Sub description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            1L
+        );
+
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(2L))
+                .andExpect(jsonPath("$.parentId").value(1L));
+
+        verify(goalService).createGoal(eq(TEST_USER_ID), any());
+    }
+
+    /**
+     * Tests POST /goals failure due to type mismatch in JSON payload fields, expecting 400 Bad Request.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request when payload has type mismatch")
+    void createGoalShouldReturn400WhenTypeMismatch() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        Map<String, Object> payload = Map.of(
+            "title", "Goal",
+            "description", "desc",
+            "startDate",List.of(2026.6,6),
+            "endDate", "invalid-date",
+            "parentId", 1
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests POST /goals failure when mandatory fields are missing, expecting 400 Bad Request (Validation failed).
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request when required fields are missing")
+    void createGoalShouldReturn400WhenValidationFails() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        Map<String, Object> payload = Map.of(
+            "description", "Missing required fields"
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests POST /goals failure due to payload having an start date in the past
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request when payload has start date in the past")
+    void createGoalShouldReturn400WhenPayloadHasStartDateInThePast() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+        LocalDate pastStartIngDate = LocalDate.now().minusDays(1);
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        Map<String, Object> payload = Map.of(
+            "title", "Goal",
+            "description", "desc",
+            "startDate", pastStartIngDate,
+            "endDate", endDate,
+            "parentId", 1
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests POST /goals failure due to payload having an startDate null and an endDate not null
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request when payload has an startDate null and an endDate not null")
+    void createGoalShouldReturn400WhenPayloadHasStartDateNullWithEndDateNotNull() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+        String endDate = LocalDate.now().plusDays(1).toString();
+        Map<String, Object> payload = Map.of(
+            "title", "Goal",
+            "description", "desc",
+            "endDate", endDate,
+            "parentId", 1
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests POST /goals failure due to payload having an endDate before the startDate
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request when payload has an endDate before the startDate")
+    void createGoalShouldReturn400WhenPayloadHasEndDateBeforeStartDate() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+        LocalDate  endDate= LocalDate.now().minusDays(1);
+        LocalDate  startDate= LocalDate.now().plusDays(1);
+        Map<String, Object> payload = Map.of(
+            "title", "Goal",
+            "description", "desc",
+            "startDate", startDate,
+            "endDate", endDate,
+            "parentId", 1
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests POST /goals failure when trying to add a goal with an invalid start date hierarchy violation.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request on GoalStartDateViolationException")
+    void createGoalShouldReturn400WhenStartDateViolated() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.createGoal(eq(TEST_USER_ID), any()))
+                .thenThrow(new GoalStartDateViolationException(LocalDate.now(), LocalDate.now().plusDays(5)));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            1L
+        );
+
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_START_DATE_VIOLATION.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).createGoal(eq(TEST_USER_ID), any());
+    }
+
+    /**
+     * Tests POST /goals failure when trying to add a goal with an invalid end date hierarchy violation.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 400 Bad Request on GoalEndDateViolationException")
+    void createGoalShouldReturn400WhenEndDateViolated() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.createGoal(eq(TEST_USER_ID), any()))
+                .thenThrow(new GoalEndDateViolationException(LocalDate.now().plusDays(10), LocalDate.now().plusDays(5)));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            1L
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_END_DATE_VIOLATION.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).createGoal(eq(TEST_USER_ID), any());
+    }
+
+    /**
+     * Tests POST /goals failure when trying to assign a child to a parent goal owned by another user, expecting 403 Forbidden.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 403 Forbidden when parent goal belongs to another user")
+    void createGoalShouldReturn403WhenParentNotOwned() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        Long foreignParentId = 99L;
+
+        when(goalService.createGoal(eq(TEST_USER_ID), any()))
+                .thenThrow(new GoalOwnershipException(foreignParentId, TEST_USER_ID));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            1L
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_FORBIDDEN.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).createGoal(eq(TEST_USER_ID), any());
+    }
+
+    /**
+     * Tests POST /goals failure when trying to assign a child to a parent goal that does not exist, expecting 404 Not Found.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 404 Not Found when parent goal does not exist")
+    void createGoalShouldReturn404WhenParentNotFound() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        Long missingParentId = 404L;
+
+        when(goalService.createGoal(eq(TEST_USER_ID), any()))
+                .thenThrow(new GoalParentNotFoundException(missingParentId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            missingParentId
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_NOT_FOUND.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).createGoal(eq(TEST_USER_ID), any());
     }
 }
