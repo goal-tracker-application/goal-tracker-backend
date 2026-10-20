@@ -660,4 +660,56 @@ public class GoalService {
             }
         }
     }
+
+    /**
+     * Deletes an existing goal and its entire sub-goal tree recursively, respecting multi-tenant 
+     * boundaries, ownership security, and database cascading rules.
+     *
+     * @param userId The unique identifier of the authenticated user performing the deletion.
+     * @param goalId The unique identifier of the goal to delete.
+     * @throws GoalNotFoundException  if the goal does not exist.
+     * @throws GoalOwnershipException if the goal does not belong to the authenticated user.
+     */
+    @Transactional
+    public void deleteGoal(Long userId, Long goalId) {
+        Goal goal = goalRepository.findById(goalId)
+            .orElseThrow(() -> new GoalNotFoundException(goalId));
+
+        if (!goal.getUserId().equals(userId)) {
+            throw new GoalOwnershipException(goalId, userId);
+        }
+
+        Goal goalTree = goalRepository.findWithSubGoalsByIdAndUserId(goalId, userId)
+            .orElse(goal);
+
+        recursivelyDeleteGoalTree(goalTree);
+    }
+
+    /**
+     * Helper recursive method to delete sub-goals in a bottom-up fashion (post-order traversal),
+     * allowing Hibernate / database cascades to safely handle entity removal and history cleanup.
+     *
+     * @param goal The current goal node to process and delete.
+     */
+    private void recursivelyDeleteGoalTree(Goal goal) {
+        if (goal.getSubGoals() != null && !goal.getSubGoals().isEmpty()) {
+            List<Goal> childrenCopy = List.copyOf(goal.getSubGoals());
+            for (Goal child : childrenCopy) {
+                recursivelyDeleteGoalTree(child);
+            }
+        }
+        
+        if (goal.getParent() != null) {
+            goal.getParent().getSubGoals().remove(goal);
+            goalRepository.save( goal.getParent());
+        }
+        
+        List<GoalStatusHistory> histories = goalStatusHistoryRepository
+            .findByGoalIdAndUserIdRecentFirst(goal.getId(), goal.getUserId());
+        if (histories != null && !histories.isEmpty()) {
+            goalStatusHistoryRepository.deleteByGoalId(goal.getId());
+        }
+
+        goalRepository.deleteGoalCustomById(goal.getId());
+    }
 }
