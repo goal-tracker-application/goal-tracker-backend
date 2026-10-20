@@ -266,7 +266,7 @@ public class GoalService {
         }
 
         switch (targetStatus) {
-            case IN_PROGRESS -> handleTransitionToInProgress(goal, currentStatus, dto.notes());
+            case IN_PROGRESS -> handleTransitionToInProgress(goal, currentStatus, dto.notes(), StatusTransitionCauseEnum.USER);
             case PAUSED -> handleTransitionToPaused(goal, StatusTransitionCauseEnum.USER, dto.notes());
             case COMPLETED, FAILED, DISCARDED -> handleTerminalTransition(goal, targetStatus, StatusTransitionCauseEnum.USER, dto.notes());
             case WAITING -> throw new IllegalGoalTransitionException(goalId, currentStatus, targetStatus);
@@ -279,7 +279,7 @@ public class GoalService {
     /**
      * Handles transitions towards IN_PROGRESS status (Activation or Elastic Unpausing).
      */
-    private void handleTransitionToInProgress(Goal goal, GoalStatusEnum currentStatus, String notes) {
+    private void handleTransitionToInProgress(Goal goal, GoalStatusEnum currentStatus, String notes, StatusTransitionCauseEnum cause) {
         if (currentStatus == GoalStatusEnum.WAITING) {
             goal.setStatus(GoalStatusEnum.IN_PROGRESS);
             goal.setStartDate(LocalDate.now());
@@ -289,7 +289,7 @@ public class GoalService {
                 new GoalStatusHistory(
                     goal, 
                     GoalStatusEnum.IN_PROGRESS, 
-                    StatusTransitionCauseEnum.USER, 
+                    cause, 
                     notes, 
                     OffsetDateTime.now()
                 )
@@ -312,7 +312,16 @@ public class GoalService {
             }
 
             goal.setStatus(GoalStatusEnum.IN_PROGRESS);
-            goalStatusHistoryRepository.save(new GoalStatusHistory(goal, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.USER, notes, OffsetDateTime.now()));
+            goalStatusHistoryRepository.save
+            (
+                new GoalStatusHistory
+                (
+                    goal, GoalStatusEnum.IN_PROGRESS,
+                    cause,
+                    notes,
+                    OffsetDateTime.now()
+                )
+            );
 
             cascadeUnpauseToChildren(goal);
         }
@@ -724,5 +733,19 @@ public class GoalService {
         }
 
         goalRepository.deleteGoalCustomById(goal.getId());
+    }
+
+    /**
+     * Automatically activates waiting goals whose start date has arrived or passed,
+     * recording an AUTO_ACTIVATION history event and cascading progress upwards.
+     */
+    @Transactional
+    public void activateScheduledGoals() {
+        List<Goal> waitingGoals = goalRepository.findGoalsReadyToStart();
+
+        for (Goal goal : waitingGoals) {
+            handleTransitionToInProgress(goal,goal.getStatus(),null,StatusTransitionCauseEnum.AUTO_ACTIVATION);
+            goalRepository.save(goal);
+        }
     }
 }
