@@ -7,6 +7,12 @@ import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
+import com.goal_tracker.goals.entity.Goal;
+import com.goal_tracker.goals.entity.GoalStatusEnum;
+import com.goal_tracker.goals.entity.GoalStatusHistory;
+import com.goal_tracker.goals.entity.StatusTransitionCauseEnum;
+import com.goal_tracker.goals.repository.GoalRepository;
+import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;
 
@@ -23,7 +29,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
+
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,13 +46,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.securityContext;
 
-
 /**
  * Integration tests for SecurityConfig.
  * 
  * This class tests the security configuration of the application, focusing on public endpoints and CORS behavior.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Transactional
 @Log4j2 
 class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
 
@@ -55,6 +64,12 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired 
+    private GoalRepository goalRepository;
+
+    @Autowired 
+    private  GoalStatusHistoryRepository goalStatusHistoryRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -253,4 +268,106 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
     }
+
+
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to /goals/{id}/tree")
+    void shouldAllowAuthenticatedAccessToGoalTree() throws Exception {
+        
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal root = new Goal(
+            user.getId(),
+            null,
+            "Root tittle",
+            "Desc",
+            LocalDate.now().minusDays(2),
+            LocalDate.now().plusDays(1),
+            GoalStatusEnum.WAITING
+        );
+
+        root = goalRepository.saveAndFlush(root);
+
+        goalStatusHistoryRepository.saveAndFlush(
+            new GoalStatusHistory(
+                root,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(3)
+            )
+        );
+
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, java.util.Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        SecurityContext context = SecurityContextHolder.getContext();
+        mockMvc.perform(get("/goals/{id}/tree", root.getId())
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(root.getId()))
+                .andExpect(jsonPath("$.title").value(root.getTitle()))
+                .andExpect(jsonPath("$.subGoals").isArray())
+                .andExpect(jsonPath("$.subGoals").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Security Config - Should denny unauthenticated access to /goals/roots")
+    void shouldDennyUnauthenticatedAccessToToGoalTree() throws Exception {
+        
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal root = new Goal(
+            user.getId(),
+            null,
+            "Root tittle",
+            "Desc",
+            LocalDate.now().minusDays(2),
+            LocalDate.now().plusDays(1),
+            GoalStatusEnum.WAITING
+        );
+
+        root = goalRepository.saveAndFlush(root);
+
+        goalStatusHistoryRepository.saveAndFlush(
+            new GoalStatusHistory(
+                root,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(3)
+            )
+        );
+
+        mockMvc.perform(get("/goals/{id}/tree", root.getId())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+    
 }
