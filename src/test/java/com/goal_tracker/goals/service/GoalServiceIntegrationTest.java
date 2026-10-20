@@ -1692,4 +1692,192 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedParent.getId(), request))
                 .isInstanceOf(GoalStartDateViolationException.class);
     }
+
+    /**
+     * Verifies that a root goal without subgoals or history can be successfully deleted.
+     */
+    @Test
+    @DisplayName("deleteGoal: Should successfully delete a root goal without subgoals or history")
+    void deleteGoalRootWithoutSubgoalsOrHistorySuccess() {
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Simple Root Goal",
+            "Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        goalService.deleteGoal(testUser.getId(), goal.getId());
+
+        assertThat(goalRepository.findById(goal.getId())).isEmpty();
+    }
+
+    /**
+     * Verifies that a root goal with a full sub-goal tree (children and grandchildren) 
+     * along with their respective status histories can be successfully deleted bottom-up.
+     */
+    @Test
+    @DisplayName("deleteGoal: Should successfully delete a root goal with a full sub-goal tree and history records")
+    void deleteGoalRootWithTreeAndHistorySuccess() {
+        Goal root = new Goal(
+            testUser.getId(),
+            null,
+            "Root Goal",
+            "Root Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(10),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        root = goalRepository.save(root);
+        goalStatusHistoryRepository.save(new GoalStatusHistory(root, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.USER, "Created", OffsetDateTime.now()));
+
+        Goal child = new Goal(
+            testUser.getId(),
+            root,
+            "Child Goal",
+            "Child Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        child = goalRepository.save(child);
+        root.getSubGoals().add(child);
+        goalStatusHistoryRepository.save(new GoalStatusHistory(child, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.DOWNWARD_CASCADE, "Cascaded", OffsetDateTime.now()));
+
+        Goal grandchild = new Goal(
+            testUser.getId(),
+            child,
+            "Grandchild Goal",
+            "Grandchild Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(2),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        grandchild = goalRepository.save(grandchild);
+        child.getSubGoals().add(grandchild);
+        goalStatusHistoryRepository.save(new GoalStatusHistory(grandchild, GoalStatusEnum.IN_PROGRESS, StatusTransitionCauseEnum.DOWNWARD_CASCADE, "Cascaded", OffsetDateTime.now()));
+        goalRepository.save(root);
+        goalRepository.flush();
+
+        goalService.deleteGoal(testUser.getId(), root.getId());
+
+        assertThat(goalRepository.findById(root.getId())).isEmpty();
+        assertThat(goalRepository.findById(child.getId())).isEmpty();
+        assertThat(goalRepository.findById(grandchild.getId())).isEmpty();
+    }
+
+    /**
+     * Verifies that deleting an intermediate goal removes it along with its descendants and history, 
+     * while keeping its parent node completely intact and correctly unlinked.
+     */
+    @Test
+    @DisplayName("deleteGoal: Should successfully delete an intermediate goal with children and history while keeping parent intact")
+    void deleteGoalIntermediateNodeSuccess() {
+        Goal parent = new Goal(
+            testUser.getId(),
+            null,
+            "Parent Goal",
+            "Parent Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(15),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        parent = goalRepository.save(parent);
+
+        Goal intermediate = new Goal(
+            testUser.getId(),
+            parent,
+            "Intermediate Goal",
+            "Intermediate Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(10),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        intermediate = goalRepository.save(intermediate);
+        parent.getSubGoals().add(intermediate);
+        goalStatusHistoryRepository.save
+        (
+            new GoalStatusHistory(
+                intermediate, 
+                GoalStatusEnum.IN_PROGRESS, 
+                StatusTransitionCauseEnum.USER, 
+                "Created", 
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+        Goal leaf = new Goal(
+            testUser.getId(),
+            intermediate,
+            "Leaf Goal",
+            "Leaf Desc",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        leaf = goalRepository.save(leaf);
+        intermediate.getSubGoals().add(leaf);
+        goalStatusHistoryRepository.save
+        (
+            new GoalStatusHistory
+            (
+                leaf, 
+                GoalStatusEnum.IN_PROGRESS, 
+                StatusTransitionCauseEnum.DOWNWARD_CASCADE, 
+                null, 
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+        goalRepository.save(parent);
+        goalRepository.flush();
+
+        goalService.deleteGoal(testUser.getId(), intermediate.getId());
+
+
+        Goal savedParent = goalRepository.findById(parent.getId()).orElseThrow();
+        assertThat(savedParent).isNotNull();
+        assertThat(savedParent.getSubGoals()).isEmpty();
+
+        assertThat(goalRepository.findById(intermediate.getId())).isEmpty();
+        assertThat(goalRepository.findById(leaf.getId())).isEmpty();
+    }
+
+    /**
+     * Verifies that attempting to delete a non-existent goal throws a {@link GoalNotFoundException}.
+     */
+    @Test
+    @DisplayName("deleteGoal: Should throw GoalNotFoundException when goal does not exist")
+    void deleteGoalNotFound() {
+        assertThatThrownBy(() -> goalService.deleteGoal(testUser.getId(), 99999L))
+                .isInstanceOf(GoalNotFoundException.class)
+                .hasMessageContaining("Goal with ID 99999 was not found");
+    }
+
+    /**
+     * Verifies that attempting to delete a goal belonging to another user throws a {@link GoalOwnershipException}.
+     */
+    @Test
+    @DisplayName("deleteGoal: Should throw GoalOwnershipException when goal belongs to another user")
+    void deleteGoalOwnershipViolation() {
+        Goal foreignGoal = new Goal(
+            anotherUser.getId(),
+            null,
+            "Foreign Goal",
+            "Owned by stranger",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        assertThatThrownBy(() -> goalService.deleteGoal(testUser.getId(), savedForeignGoal.getId()))
+                .isInstanceOf(GoalOwnershipException.class)
+                .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d", savedForeignGoal.getId(), testUser.getId()));
+    }
 }
