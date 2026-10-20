@@ -34,7 +34,10 @@ import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.exceptions.GlobalExceptionHandler;
 import com.goal_tracker.goals.dto.GoalResponseDto;
+import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
+import com.goal_tracker.goals.exceptions.GoalNotFoundException;
+import com.goal_tracker.goals.exceptions.GoalOwnershipException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.service.GoalService;
 
@@ -232,5 +235,152 @@ class GoalControllerUnitTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests successful retrieval of a single goal tree structure with empty sub-goals.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/tree - Should return single goal tree with empty sub-goals successfully")
+    void getGoalTreeShouldReturnSingleGoalTreeSuccessfully() throws Exception {
+        Long goalId = 10L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        GoalTreeResponseDto treeDto = new GoalTreeResponseDto(
+            goalId,
+            "Standalone Goal",
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            Collections.emptyList()
+        );
+
+        when(goalService.getGoalTree(TEST_USER_ID, goalId)).thenReturn(treeDto);
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/tree", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(goalId))
+                .andExpect(jsonPath("$.title").value("Standalone Goal"))
+                .andExpect(jsonPath("$.subGoals").isArray())
+                .andExpect(jsonPath("$.subGoals").isEmpty());
+
+        verify(goalService).getGoalTree(TEST_USER_ID, goalId);
+    }
+
+    /**
+     * Tests successful retrieval of a populated goal tree including nested sub-goals.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/tree - Should return populated goal tree with nested sub-goals successfully")
+    void getGoalTreeShouldReturnNestedGoalTreeSuccessfully() throws Exception {
+        Long rootId = 10L;
+        Long childId = 20L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        GoalTreeResponseDto childDto = new GoalTreeResponseDto(
+            childId,
+            "Child Sub-Goal",
+            GoalStatusEnum.WAITING.getId(),
+            LocalDate.now(),
+            LocalDate.now().plusDays(3),
+            Collections.emptyList()
+        );
+
+        GoalTreeResponseDto rootTreeDto = new GoalTreeResponseDto(
+            rootId,
+            "Parent Goal",
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            LocalDate.now(),
+            LocalDate.now().plusDays(10),
+            List.of(childDto)
+        );
+
+        when(goalService.getGoalTree(TEST_USER_ID, rootId)).thenReturn(rootTreeDto);
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/tree", rootId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(rootId))
+                .andExpect(jsonPath("$.title").value("Parent Goal"))
+                .andExpect(jsonPath("$.subGoals").isArray())
+                .andExpect(jsonPath("$.subGoals[0].id").value(childId))
+                .andExpect(jsonPath("$.subGoals[0].title").value("Child Sub-Goal"));
+
+        verify(goalService).getGoalTree(TEST_USER_ID, rootId);
+    }
+
+    /**
+     * Tests response handling when requesting a goal tree for a non-existent goal, expecting a 404 Not Found status.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/tree - Should return 404 Not Found when goal does not exist")
+    void getGoalTreeShouldReturn404WhenGoalDoesNotExist() throws Exception {
+        Long nonexistentId = 99L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.getGoalTree(TEST_USER_ID, nonexistentId))
+                .thenThrow(new GoalNotFoundException(nonexistentId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/tree", nonexistentId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_NOT_FOUND.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).getGoalTree(TEST_USER_ID, nonexistentId);
+    }
+
+    /**
+     * Tests response handling when requesting a goal tree belonging to another user, expecting a 403 Forbidden status.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/tree - Should return 403 Forbidden when goal belongs to another user")
+    void getGoalTreeShouldReturn403WhenGoalNotOwned() throws Exception {
+        Long otherUserGoalId = 50L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.getGoalTree(TEST_USER_ID, otherUserGoalId))
+                .thenThrow(new GoalOwnershipException(otherUserGoalId, TEST_USER_ID));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/tree", otherUserGoalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_FORBIDDEN.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).getGoalTree(TEST_USER_ID, otherUserGoalId);
     }
 }
