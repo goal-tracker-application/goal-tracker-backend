@@ -7,12 +7,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.goals.dto.GoalResponseDto;
+import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.service.GoalService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -70,6 +72,32 @@ public class GoalController {
             @AuthenticationPrincipal UserPrincipal principal) {
         List<GoalResponseDto> rootGoals = goalService.getRootGoals(principal.id(), statusId);
         return ResponseEntity.ok(rootGoals);
+    }
+
+    /**
+     * Retrieves the complete hierarchical tree of a goal for the authenticated user.
+     *
+     * @param goalId      the unique identifier of the target root or parent goal
+     * @param principal   the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} containing the hierarchical {@link GoalTreeResponseDto} structure
+     */
+    @GetMapping("/{id}/tree")
+    @Operation(
+        summary = "Get goal tree structure",
+        description = "Retrieves the complete hierarchical tree of a goal along with its sub-goals for the authenticated user."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved the goal tree structure."),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
+        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
+        @ApiResponse(responseCode = "404", description = "Goal not found.")
+    })
+    public ResponseEntity<GoalTreeResponseDto> getGoalTree(
+            @Parameter(description = "Numeric identifier of the target goal")
+            @PathVariable("id") Long goalId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        GoalTreeResponseDto goalTree = goalService.getGoalTree(principal.id(), goalId);
+        return ResponseEntity.ok(goalTree);
     }
 
 }
