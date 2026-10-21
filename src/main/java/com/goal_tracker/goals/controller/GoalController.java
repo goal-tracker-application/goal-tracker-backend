@@ -7,6 +7,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -192,5 +193,33 @@ public class GoalController {
             @AuthenticationPrincipal UserPrincipal principal) {
         GoalResponseDto response = goalService.changeGoalStatus(principal.id(), goalId, request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Deletes an existing goal and its entire sub-goal tree recursively and all it's status histories for the authenticated user,
+     * respecting multi-tenant boundaries and ownership security.
+     *
+     * @param goalId    the unique identifier of the target goal to delete
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} with HTTP 204 (No Content) upon successful deletion
+     */
+    @DeleteMapping("/{id}")
+    @Operation(
+        summary = "Delete an existing goal",
+        description = "Deletes an existing goal and its entire sub-goal tree recursively and all it's status histories for the authenticated user, enforcing ownership rules."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Goal successfully deleted."),
+        @ApiResponse(responseCode = "400", description = "Validation error or invalid goal identifier."),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
+        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
+        @ApiResponse(responseCode = "404", description = "Goal not found.")
+    })
+    public ResponseEntity<Void> deleteGoal(
+            @Parameter(description = "Numeric identifier of the target goal")
+            @PathVariable("id") @Min(value = 1, message = "Goal ID must be greater than or equal to 1.") Long goalId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        goalService.deleteGoal(principal.id(), goalId);
+        return ResponseEntity.noContent().build();
     }
 }
