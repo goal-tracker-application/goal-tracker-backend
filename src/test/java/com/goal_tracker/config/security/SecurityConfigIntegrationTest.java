@@ -663,4 +663,92 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
     }
+
+    /**
+     * Test to verify that an authenticated user can successfully delete a goal via DELETE /goals/{id}.
+     * <p>
+     * Sets up a valid user, persists a goal, injects the authentication context,
+     * performs a DELETE request, and expects a 204 No Content response.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to delete goal via DELETE /goals/{id}")
+    void shouldAllowAuthenticatedAccessToDeleteGoal() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Goal to delete",
+            "Description",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, java.util.Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/goals/{id}", goal.getId())
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * Test to verify that unauthenticated requests to delete a goal via DELETE /goals/{id} are denied.
+     * <p>
+     * Sends a DELETE request without any security context or bearer token, expecting a 401 Unauthorized response
+     * along with the standard error structure.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should deny unauthenticated access to delete goal via DELETE /goals/{id}")
+    void shouldDenyUnauthenticatedAccessToDeleteGoal() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Goal to delete",
+            "Description",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/goals/{id}", goal.getId())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
 }
