@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +20,7 @@ import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
+import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.service.GoalService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,7 +29,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-
+import jakarta.validation.constraints.Min;
 /**
  * REST controller for managing goal operations, providing endpoints for
  * creation, updates, status transitions, tree retrievals, and deletions.
@@ -99,9 +101,9 @@ public class GoalController {
     })
     public ResponseEntity<GoalTreeResponseDto> getGoalTree(
             @Parameter(description = "Numeric identifier of the target goal")
-            @PathVariable("id") Long goalId,
+            @PathVariable("id") @Min(value = 1, message = "Goal ID must be greater than or equal to 1.") Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
-        GoalTreeResponseDto goalTree = goalService.getGoalTree(principal.id(), goalId);
+        GoalTreeResponseDto goalTree = goalService.getGoalTree(principal.id(), id);
         return ResponseEntity.ok(goalTree);
     }
 
@@ -132,4 +134,33 @@ public class GoalController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    /**
+     * Updates an existing goal's basic properties and dates for the authenticated user,
+     * respecting multi-tenant boundaries and hierarchical constraints.
+     *
+     * @param goalId    the unique identifier of the target goal to update
+     * @param request   the DTO containing the updated goal details
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} containing the updated {@link GoalResponseDto}
+     */
+    @PatchMapping("/{id}")
+    @Operation(
+        summary = "Update an existing goal",
+        description = "Updates an existing goal's properties and dates for the authenticated user, excluding parent changes and direct status modifications."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Goal successfully updated."),
+        @ApiResponse(responseCode = "400", description = "Validation error, invalid dates, or constraint violations."),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
+        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
+        @ApiResponse(responseCode = "404", description = "Goal not found.")
+    })
+    public ResponseEntity<GoalResponseDto> updateGoal(
+            @Parameter(description = "Numeric identifier of the target goal")
+            @PathVariable("id") @Min(value = 1, message = "Goal ID must be greater than or equal to 1.") Long id,
+            @Valid @RequestBody GoalUpdateRequestDto request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        GoalResponseDto response = goalService.updateGoal(principal.id(), id, request);
+        return ResponseEntity.ok(response);
+    }
 }
