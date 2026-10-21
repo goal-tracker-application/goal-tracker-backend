@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -76,15 +77,12 @@ public class GoalControllerUnitTest {
 
     private MockMvc mockMvc;
 
-
-
     @MockitoBean
     private GoalService goalService;
 
     private GoalController goalController;
 
     private ObjectMapper objectMapper;
-
 
     private static final Long TEST_USER_ID = 1L;
 
@@ -1676,5 +1674,136 @@ public class GoalControllerUnitTest {
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
 
         verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests successful deletion of a goal via DELETE /goals/{id}.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("DELETE /goals/{id} - Should delete goal successfully when id is valid and owned")
+    void deleteGoalShouldDeleteSuccessfully() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        Mockito.doNothing().when(goalService).deleteGoal(eq(TEST_USER_ID), eq(goalId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(delete("/goals/{id}", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+
+        verify(goalService).deleteGoal(eq(TEST_USER_ID), eq(goalId));
+    }
+
+    /**
+     * Tests DELETE /goals/{id} failure due to type mismatch in the path variable id.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("DELETE /goals/{id} - Should return 400 Bad Request when goal id has type mismatch")
+    void deleteGoalShouldReturn400WhenIdTypeMismatch() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(delete("/goals/{id}", "invalidType")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).deleteGoal(any(), any());
+    }
+
+    /**
+     * Tests DELETE /goals/{id} failure when goal id is zero or negative.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("DELETE /goals/{id} - Should return 400 Bad Request when goal id fails validation (zero or negative)")
+    void deleteGoalShouldReturn400WhenIdValidationFails() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(delete("/goals/{id}", 0L)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).deleteGoal(any(), eq(0L));
+    }
+
+    /**
+     * Tests DELETE /goals/{id} failure when goal belongs to another user, expecting 403 Forbidden.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("DELETE /goals/{id} - Should return 403 Forbidden when goal belongs to another user")
+    void deleteGoalShouldReturn403WhenGoalNotOwned() throws Exception {
+        Long foreignGoalId = 50L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        Mockito.doThrow(new GoalOwnershipException(foreignGoalId, TEST_USER_ID))
+                .when(goalService).deleteGoal(eq(TEST_USER_ID), eq(foreignGoalId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(delete("/goals/{id}", foreignGoalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_FORBIDDEN.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).deleteGoal(eq(TEST_USER_ID), eq(foreignGoalId));
+    }
+
+    /**
+     * Tests DELETE /goals/{id} failure when the goal is not found, expecting 404 Not Found.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("DELETE /goals/{id} - Should return 404 Not Found when goal does not exist")
+    void deleteGoalShouldReturn404WhenGoalNotFound() throws Exception {
+        Long nonexistentId = 99L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        Mockito.doThrow(new GoalNotFoundException(nonexistentId))
+                .when(goalService).deleteGoal(eq(TEST_USER_ID), eq(nonexistentId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(delete("/goals/{id}", nonexistentId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_NOT_FOUND.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).deleteGoal(eq(TEST_USER_ID), eq(nonexistentId));
     }
 }
