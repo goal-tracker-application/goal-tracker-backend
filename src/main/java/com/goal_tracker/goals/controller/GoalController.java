@@ -163,4 +163,34 @@ public class GoalController {
         GoalResponseDto response = goalService.updateGoal(principal.id(), id, request);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Updates the status of an existing goal for the authenticated user,
+     * handling state machine rules and cascading behaviors.
+     *
+     * @param goalId    the unique identifier of the target goal whose status is being changed
+     * @param request   the DTO containing the target status identifier and optional notes
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} containing the updated {@link GoalResponseDto}
+     */
+    @PatchMapping("/{id}/status")
+    @Operation(
+        summary = "Update goal status",
+        description = "Changes the status of a specific goal for the authenticated user, supporting state machine transitions, unpausing, and cascading updates."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Goal status successfully updated."),
+        @ApiResponse(responseCode = "400", description = "Validation error, invalid payload, or illegal goal state transition."),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
+        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
+        @ApiResponse(responseCode = "404", description = "Goal not found.")
+    })
+    public ResponseEntity<GoalResponseDto> changeGoalStatus(
+            @Parameter(description = "Numeric identifier of the target goal")
+            @PathVariable("id") @Min(value = 1, message = "Goal ID must be greater than or equal to 1.") Long goalId,
+            @Valid @RequestBody com.goal_tracker.goals.dto.GoalStatusChangeRequestDto request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        GoalResponseDto response = goalService.changeGoalStatus(principal.id(), goalId, request);
+        return ResponseEntity.ok(response);
+    }
 }
