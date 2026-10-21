@@ -43,6 +43,7 @@ import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.exceptions.GlobalExceptionHandler;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
+import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
@@ -52,6 +53,7 @@ import com.goal_tracker.goals.exceptions.GoalOwnershipException;
 import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
+import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
 import com.goal_tracker.goals.service.GoalService;
 
 import jakarta.validation.Validator;
@@ -1308,5 +1310,371 @@ public class GoalControllerUnitTest {
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
 
         verify(goalService).updateGoal(eq(TEST_USER_ID), eq(nonexistentId), any());
+    }
+
+    /**
+     * Tests successful status update of a goal via PATCH /goals/{id}/status.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should update goal status successfully when payload is valid")
+    void changeGoalStatusShouldUpdateSuccessfully() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        GoalResponseDto responseDto = new GoalResponseDto(
+            goalId, 
+            "Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(10),
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            null,
+            OffsetDateTime.now(),
+            null
+        );
+
+        when(goalService.changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any())).thenReturn(responseDto);
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            "Starting goal"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(goalId))
+                .andExpect(jsonPath("$.statusId").value(GoalStatusEnum.IN_PROGRESS.getId()));
+
+        verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure due to type mismatch in the path variable id.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request when goal id has type mismatch")
+    void changeGoalStatusShouldReturn400WhenIdTypeMismatch() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Notes"
+        );
+
+        mockMvc.perform(patch("/goals/invalid-id/status")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).changeGoalStatus(eq(TEST_USER_ID), any(), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when goal id is zero or negative.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request when goal id fails validation (zero or negative)")
+    void changeGoalStatusShouldReturn400WhenIdValidationFails() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Notes"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", 0L)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).changeGoalStatus(eq(TEST_USER_ID), eq(0L), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure due to type mismatch in the payload fields.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request when payload has type mismatch")
+    void changeGoalStatusShouldReturn400WhenPayloadTypeMismatch() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        Map<String, Object> payload = Map.of(
+            "statusId", "invalid-status-type",
+            "notes", "Notes"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when payload validation fails (e.g., missing statusId).
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request when payload validation fails")
+    void changeGoalStatusShouldReturn400WhenPayloadValidationFails() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        Map<String, Object> payload = Map.of(
+            "notes", "Missing statusId"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when payload validation fails invalid status_id
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request when payload validation fails for an invalid status id")
+    void changeGoalStatusShouldReturn400WhenPayloadValidationFailsForAnInvalidStatusId() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        Map<String, Object> payload = Map.of(
+            "statusId", 8,
+            "notes", "Invalid statusId"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when the goal is not found, expecting 404 Not Found.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 404 Not Found when goal does not exist")
+    void changeGoalStatusShouldReturn404WhenGoalNotFound() throws Exception {
+        Long nonexistentId = 99L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.changeGoalStatus(eq(TEST_USER_ID), eq(nonexistentId), any()))
+                .thenThrow(new GoalNotFoundException(nonexistentId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Notes"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", nonexistentId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_NOT_FOUND.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(nonexistentId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when goal belongs to another user, expecting 403 Forbidden.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 403 Forbidden when goal belongs to another user")
+    void changeGoalStatusShouldReturn403WhenGoalNotOwned() throws Exception {
+        Long foreignGoalId = 50L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.changeGoalStatus(eq(TEST_USER_ID), eq(foreignGoalId), any()))
+                .thenThrow(new GoalOwnershipException(foreignGoalId, TEST_USER_ID));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Notes"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", foreignGoalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_FORBIDDEN.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(foreignGoalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when status transition is unchanged (ERR_GOAL_STATUS_UNCHANGED).
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request on ERR_GOAL_STATUS_UNCHANGED")
+    void changeGoalStatusShouldReturn400WhenStatusUnchanged() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any()))
+                .thenThrow(new IllegalGoalTransitionException(goalId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Same status"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_STATUS_UNCHANGED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when goal is in terminal state (ERR_GOAL_TERMINAL_STATE).
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request on ERR_GOAL_TERMINAL_STATE")
+    void changeGoalStatusShouldReturn400WhenTerminalState() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any()))
+                .thenThrow(new IllegalGoalTransitionException(goalId, GoalStatusEnum.COMPLETED));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Modify completed"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_TERMINAL_STATE.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
+    }
+
+    /**
+     * Tests PATCH /goals/{id}/status failure when transition is invalid (ERR_INVALID_GOAL_TRANSITION).
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 400 Bad Request on ERR_INVALID_GOAL_TRANSITION")
+    void changeGoalStatusShouldReturn400WhenInvalidTransition() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any()))
+                .thenThrow(new IllegalGoalTransitionException(goalId, GoalStatusEnum.WAITING, GoalStatusEnum.COMPLETED));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.WAITING.getId(), "Invalid transition"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_INVALID_GOAL_TRANSITION.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).changeGoalStatus(eq(TEST_USER_ID), eq(goalId), any());
     }
 }
