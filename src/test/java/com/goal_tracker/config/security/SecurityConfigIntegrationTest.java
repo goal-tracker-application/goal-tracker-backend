@@ -8,6 +8,7 @@ import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
+import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
 import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.entity.Goal;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
@@ -550,6 +551,110 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
         );
 
         mockMvc.perform(patch("/goals/{id}", goal.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Test to verify that an authenticated user can successfully update a goal's status via PATCH /goals/{id}/status.
+     * <p>
+     * Sets up a valid user, persists a goal in WAITING status, injects the authentication context,
+     * performs a PATCH request to change its status to IN_PROGRESS with optional notes,
+     * and expects a 200 OK response with the updated goal details.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to update goal status via PATCH /goals/{id}/status")
+    void shouldAllowAuthenticatedAccessToUpdateGoalStatus() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Initial Title",
+            "Initial Description",
+            LocalDate.now().plusDays(2),
+            LocalDate.now().plusDays(10),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, java.util.Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto requestDto = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            "Starting goal in integration test"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goal.getId())
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(goal.getId()))
+                .andExpect(jsonPath("$.statusId").value(GoalStatusEnum.IN_PROGRESS.getId()));
+    }
+
+    /**
+     * Test to verify that unauthenticated requests to update a goal status via PATCH /goals/{id}/status are denied.
+     * <p>
+     * Sends a PATCH request without any security context or bearer token, expecting a 401 Unauthorized response
+     * along with the standard error structure.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should deny unauthenticated access to update goal status via PATCH /goals/{id}/status")
+    void shouldDenyUnauthenticatedAccessToUpdateGoalStatus() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Initial Title",
+            "Initial Description",
+            LocalDate.now().plusDays(2),
+            LocalDate.now().plusDays(10),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        GoalStatusChangeRequestDto requestDto = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(),
+            "Starting goal without auth"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goal.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestDto)))
                 .andExpect(status().isUnauthorized())
