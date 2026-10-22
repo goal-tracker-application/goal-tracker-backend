@@ -69,6 +69,12 @@ public class SecurityConfig {
                         // Endpoints públicos
                         .requestMatchers("/auth/register", "/auth/login", "/auth/guest").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html",
+                                "/webjars/**"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/auth/password").authenticated()
                         .requestMatchers("/goals/**").authenticated()
                         .anyRequest().authenticated()
