@@ -5,8 +5,11 @@ import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.service.AuthService;
+import com.goal_tracker.errors.ErrorResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,9 +62,24 @@ public class AuthController {
         description = "Validates registration data, creates a regular user account, and returns an access JWT."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "User successfully registered and authenticated."),
-        @ApiResponse(responseCode = "400", description = "Validation error, passwords mismatch, or email already in use."),
-        @ApiResponse(responseCode = "409", description = "Email address is already registered.")
+        @ApiResponse
+        (
+            responseCode = "201", 
+            description = "User successfully registered and authenticated.",
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error, passwords mismatch, or email already in use.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "409", 
+            description = "Email address is already registered.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
@@ -80,9 +98,24 @@ public class AuthController {
         description = "Authenticates a user via email and password, returning a signed JWT access token."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Authentication successful. Returns the JWT access token."),
-        @ApiResponse(responseCode = "400", description = "Validation error in the request payload."),
-        @ApiResponse(responseCode = "401", description = "Invalid credentials.")
+        @ApiResponse
+        (
+            responseCode = "200", 
+            description = "Authentication successful. Returns the JWT access token.",
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error in the request payload.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Invalid credentials.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
@@ -100,7 +133,12 @@ public class AuthController {
         description = "Provisions a temporary guest user account and returns an access JWT."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Guest session successfully created.")
+        @ApiResponse
+        (
+            responseCode = "201", 
+            description = "Guest session successfully created.",
+            content = @Content(schema = @Schema(implementation = AuthResponse.class))
+        )
     })
     public ResponseEntity<AuthResponse> createGuest() {
         AuthResponse response = authService.createGuest();
@@ -119,8 +157,23 @@ public class AuthController {
         description = "Allows an authenticated user to change their password by validating the current one."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "204", description = "Password successfully updated."),
-        @ApiResponse(responseCode = "400", description = "Validation error, current password incorrect, or new passwords mismatch.")
+        @ApiResponse
+        (
+            responseCode = "204", 
+            description = "Password successfully updated."
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error, current password incorrect, or new passwords mismatch.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<Void> updatePassword(@Valid @RequestBody PasswordUpdateRequest request) {
         authService.updatePassword(request);
