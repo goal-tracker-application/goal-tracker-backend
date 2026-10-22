@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.goal_tracker.config.security.details.UserPrincipal;
+import com.goal_tracker.errors.ErrorResponse;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
@@ -26,6 +27,9 @@ import com.goal_tracker.goals.service.GoalService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -70,9 +74,24 @@ public class GoalController {
         description = "Retrieves all top-level root goals belonging to the authenticated user, with an optional filter by status ID."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved the list of root goals (can be empty)."),
-        @ApiResponse(responseCode = "400", description = "Invalid status identifier provided."),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token.")
+        @ApiResponse
+        (
+            responseCode = "200", 
+            description = "Successfully retrieved the list of root goals (can be empty).",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = GoalResponseDto.class)))
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Invalid status identifier provided.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<List<GoalResponseDto>> getRootGoals(
             @Parameter(description = "Optional status ID to filter root goals")
@@ -95,10 +114,30 @@ public class GoalController {
         description = "Retrieves the complete hierarchical tree of a goal along with its sub-goals for the authenticated user."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved the goal tree structure."),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
-        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
-        @ApiResponse(responseCode = "404", description = "Goal not found.")
+        @ApiResponse
+        (
+            responseCode = "200", 
+            description = "Successfully retrieved the goal tree structure.",
+            content = @Content(schema = @Schema(implementation = GoalTreeResponseDto.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "403", 
+            description = "Access denied due to goal ownership mismatch.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "404", 
+            description = "Goal not found.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<GoalTreeResponseDto> getGoalTree(
             @Parameter(description = "Numeric identifier of the target goal")
@@ -122,11 +161,36 @@ public class GoalController {
         description = "Creates a new goal for the authenticated user, supporting optional parent goal association and hierarchical date validations."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Goal successfully created."),
-        @ApiResponse(responseCode = "400", description = "Validation error, invalid dates, or constraint violations."),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
-        @ApiResponse(responseCode = "403", description = "Access denied due to parent goal ownership mismatch."),
-        @ApiResponse(responseCode = "404", description = "Parent goal not found.")
+        @ApiResponse
+        (
+            responseCode = "201", 
+            description = "Goal successfully created.",
+            content = @Content(schema = @Schema(implementation = GoalResponseDto.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error, invalid dates, or constraint violations.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "403", 
+            description = "Access denied due to parent goal ownership mismatch.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "404", 
+            description = "Parent goal not found.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<GoalResponseDto> createGoal(
             @Valid @RequestBody GoalCreateRequestDto request,
@@ -150,11 +214,36 @@ public class GoalController {
         description = "Updates an existing goal's properties and dates for the authenticated user, excluding parent changes and direct status modifications."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Goal successfully updated."),
-        @ApiResponse(responseCode = "400", description = "Validation error, invalid dates, or constraint violations."),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
-        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
-        @ApiResponse(responseCode = "404", description = "Goal not found.")
+        @ApiResponse
+        (
+            responseCode = "200", 
+            description = "Goal successfully updated.",
+            content = @Content(schema = @Schema(implementation = GoalResponseDto.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error, invalid dates, or constraint violations.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "403", 
+            description = "Access denied due to goal ownership mismatch.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "404", 
+            description = "Goal not found.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
     })
     public ResponseEntity<GoalResponseDto> updateGoal(
             @Parameter(description = "Numeric identifier of the target goal")
@@ -209,11 +298,35 @@ public class GoalController {
         description = "Deletes an existing goal and its entire sub-goal tree recursively and all it's status histories for the authenticated user, enforcing ownership rules."
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "204", description = "Goal successfully deleted."),
-        @ApiResponse(responseCode = "400", description = "Validation error or invalid goal identifier."),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access or missing valid JWT token."),
-        @ApiResponse(responseCode = "403", description = "Access denied due to goal ownership mismatch."),
-        @ApiResponse(responseCode = "404", description = "Goal not found.")
+        @ApiResponse
+        (
+            responseCode = "204",
+            description = "Goal successfully deleted."
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error or invalid goal identifier.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "403", 
+            description = "Access denied due to goal ownership mismatch.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "404", 
+            description = "Goal not found.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
     })
     public ResponseEntity<Void> deleteGoal(
             @Parameter(description = "Numeric identifier of the target goal")
