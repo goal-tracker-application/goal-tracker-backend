@@ -107,6 +107,13 @@ public enum ErrorCode {
     ERR_NOT_FOUND("The requested resource does not exist."),
 
     /**
+     * HTTP 405 - Method Not Allowed.
+     * Occurs when the HTTP method
+     * is not supported by the endpoint.
+     */
+    ERR_METHOD_NOT_SUPPORTED(""),
+
+    /**
      * HTTP 409 - Conflict.
      * Occurs when attempting to register a user with an email address 
      * that is already occupied by another account.
