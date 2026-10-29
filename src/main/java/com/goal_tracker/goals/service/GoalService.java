@@ -29,6 +29,7 @@ import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalTerminalStateException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
+import com.goal_tracker.goals.exceptions.InvalidDateRangeException;
 import com.goal_tracker.goals.mapper.GoalMapper;
 import com.goal_tracker.goals.mapper.GoalStatusHistoryMapper;
 import com.goal_tracker.goals.repository.GoalRepository;
@@ -603,6 +604,19 @@ public class GoalService {
             }
             if (dto.endDate() == null || !dto.endDate().equals(goal.getEndDate())) {
                 throw new GoalEndDateImmutableException(goalId);
+            }
+        } else if( currentStatus == GoalStatusEnum.WAITING){
+
+            if(dto.startDate() == null && dto.endDate()!= null){
+                throw new InvalidDateRangeException();
+            }
+
+            if(dto.startDate() != null && dto.startDate().isBefore(LocalDate.now())){
+                throw new InvalidDateRangeException(dto.startDate());
+            }
+
+            if(dto.startDate() != null && dto.endDate() != null && dto.endDate().isBefore(dto.startDate())){
+                throw new InvalidDateRangeException(dto.startDate(), dto.endDate());
             }
         }
 
