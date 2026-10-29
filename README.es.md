@@ -132,6 +132,12 @@ Este payload de respuesta es común para todos los endpoints con payload de resp
 
     - No se retorna ningún payload en el cuerpo tras una actualización exitosa de contraseña.
 
+* **DELETE** `/auth/account` - Elimina la cuenta del usuario actualmente autenticado, junto con todas las metas asociadas, árboles recursivos de submetas e historiales de estado.
+
+    * Este endpoint no requiere un cuerpo de solicitud.
+
+    * No se devuelve ningún payload tras una eliminación exitosa (HTTP 204 No Content).
+
 ### 3.3 Objetivos (Autenticado)
 
 Los endpoints bajo `/goals` requieren un token JWT válido enviado en la cabecera `Authorization` (`Bearer <token>`).
@@ -400,12 +406,13 @@ Todas las respuestas de error de la API están estandarizadas bajo el Objeto de 
 | `ERR_TOO_MANY_REQUESTS` | Se ha superado el límite de peticiones permitidas (rate-limiting) para los endpoints de autenticación y registro (`/auth/**`), protegiendo al sistema contra abusos o ataques de fuerza bruta. | 429 Too Many Requests |
 | `ERR_INTERNAL_SERVER_ERROR` | Red de seguridad final para capturar excepciones inesperadas del sistema (caídas de conectividad, punteros nulos o fallas imprevistas de infraestructura). La trazabilidad completa permanece oculta detrás del `trackingId`. | 500 Internal Server Error |
 
-## 4. Tareas Programadas (Scheduled Jobs)
+## 4 Tareas Programadas
 
-La aplicación incluye componentes automatizados en segundo plano programados para ejecutarse diariamente a medianoche (`0 0 0 * * *`) para mantener el ciclo de vida de los objetivos y garantizar la consistencia:
+La aplicación incluye componentes automatizados en segundo plano programados para ejecutarse diariamente a medianoche (`0 0 0 * * *`) para mantener el estado del sistema, el ciclo de vida de las metas y la consistencia de la base de datos:
 
-- **`GoalActivationJob`**: Escanea objetivos en espera (`WAITING`) cuya fecha de inicio ha llegado o pasado, transicionándolos automáticamente a `IN_PROGRESS` y generando su correspondiente registro de historial de estado con la causa **`AUTO_ACTIVATION`**. Todos sus descendientes y ancestros que se encuentren en `WAITING` o `PAUSED` transicionarán automáticamente a `IN_PROGRESS`, actualizando su fecha de inicio a la fecha actual, con causa `DOWNWARD_CASCADE` para descendientes y `UPWARD_CASCADE` para ancestros.
-- **`GoalExpirationJob`**: Evalúa objetivos en progreso (`IN_PROGRESS`) vencidos de abajo hacia arriba (orden jerárquico post-orden) y los marca automáticamente como `FAILED`, registrando la entrada de cambio de estado con la causa **`AUTO_FAILURE`**. Todos sus descendientes que no estuvieran ya en un estado terminal (`COMPLETED`, `FAILED` o `DISCARDED`) transicionarán automáticamente a `DISCARDED` con causa `DOWNWARD_CASCADE`.
+- **`GoalActivationJob`**: Escanea las metas en espera (`WAITING`) cuya fecha de inicio haya llegado o pasado, pasándolas automáticamente a `IN_PROGRESS` y generando su correspondiente registro en el historial de estado con la causa **`AUTO_ACTIVATION`**. Todos sus descendientes y ancestros en estado `WAITING` o `PAUSED` pasarán automáticamente a `IN_PROGRESS`, actualizando su fecha de inicio a la fecha actual, con la causa `DOWNWARD_CASCADE` para los descendientes y `UPWARD_CASCADE` para los ancestros.
+- **`GoalExpirationJob`**: Evalúa de abajo hacia arriba (post-orden jerárquico) las metas `IN_PROGRESS` expiradas y las marca automáticamente como `FAILED`, registrando la entrada en el historial de cambios con la causa **`AUTO_FAILURE`**. Todos sus descendientes que no se encuentren ya en un estado terminal (`COMPLETED`, `FAILED` o `DISCARDED`) pasarán automáticamente a `DISCARDED` con la causa `DOWNWARD_CASCADE`.
+- **`GuestCleanupJob`**: Elimina todas las cuentas de usuarios invitados expirados junto con todas sus metas e historiales de estado asociados.
 
 ## 5. Pruebas
 
