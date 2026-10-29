@@ -23,13 +23,86 @@ public enum ErrorCode {
      * HTTP 400 - Bad Request.
      * Occurs when the provided password does not match its confirmation.
      */
-    ERR_PASSWORD_MISMATCH("The provided password do not match it's confirmation."),
+    ERR_PASSWORD_MISMATCH("The provided password do not match its confirmation."),
     
     /**
      * HTTP 400 - Bad Request.
      * Occurs when the provided current password for password update is incorrect.
      */
     INVALID_CURRENT_PASSWORD("The provided current password is incorrect."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when a subgoal's start date is earlier than its ancestor's start date.
+     */
+    ERR_GOAL_START_DATE_VIOLATION("The subgoal's start date cannot be earlier than its ancestor's start date."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when a subgoal's end date is later than its ancestor's end date.
+     */
+    ERR_GOAL_END_DATE_VIOLATION("The subgoal's end date cannot be later than its ancestor's end date."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to transition a goal to its current status.
+     */
+    ERR_GOAL_STATUS_UNCHANGED("The goal is already in the requested status."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to modify a goal that has already reached a terminal state.
+     */
+    ERR_GOAL_TERMINAL_STATE("Cannot modify a goal that has already reached a terminal state."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting an invalid goal status transition.
+     */
+    ERR_INVALID_GOAL_TRANSITION("The requested goal status transition is not allowed."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when the provided goal status identifier is invalid or not found.
+     */
+    ERR_GOAL_STATUS_NOT_FOUND("The provided goal status identifier is invalid."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to modify the start date of a goal that is already in progress.
+     */
+    ERR_GOAL_START_DATE_IMMUTABLE("Cannot modify the start date of a goal that is already in progress."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to modify the end date of a goal that is currently paused.
+     */
+    ERR_GOAL_END_DATE_IMMUTABLE("Cannot modify the end date of a goal that is currently paused."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set or leave the start date as null for a goal that requires it.
+     */
+    ERR_GOAL_START_DATE_REQUIRED("The start date cannot be null for a goal that is in progress or paused."),
+
+
+   /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set or leave the start date as null while the end date is not null.
+     */
+    ERR_GOAL_START_DATE_REQUIRED_WHEN_END_DATE_PRESENT("The start date cannot be null while the end date is not null."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set the start date in the past.
+     */
+    ERR_GOAL_START_DATE_IN_PAST("The start date cannot be in the past."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set the end date before the start date.
+     */
+    ERR_GOAL_END_DATE_BEFORE_START("The end date cannot be before the start date."),
 
     /**
      * HTTP 401 - Unauthorized.
@@ -53,31 +126,18 @@ public enum ErrorCode {
     ERR_NOT_FOUND("The requested resource does not exist."),
 
     /**
+     * HTTP 405 - Method Not Allowed.
+     * Occurs when the HTTP method
+     * is not supported by the endpoint.
+     */
+    ERR_METHOD_NOT_SUPPORTED("The requested HTTP method is not supported by the endpoint."),
+
+    /**
      * HTTP 409 - Conflict.
      * Occurs when attempting to register a user with an email address 
      * that is already occupied by another account.
      */
     ERR_EMAIL_ALREADY_EXISTS("The entered email address is already registered."),
-
-    /**
-     * HTTP 409 - Conflict.
-     * Occurs when attempting to create a goal log (check-in) for a goal 
-     * on a date that already has an existing entry.
-     */
-    ERR_DUPLICATE_GOAL_LOG("A progress entry (check-in) for this goal already exists on the specified date."),
-
-    /**
-     * HTTP 409 - Conflict.
-     * Occurs when the goal hierarchy is invalid 
-     * (e.g., a goal cannot be its own parent or cause circular dependencies).
-     */
-    ERR_INVALID_GOAL_HIERARCHY("The goal hierarchy is invalid (a goal cannot be its own parent or generate circular dependencies)."),
-
-    /**
-     * HTTP 422 - Unprocessable Entity.
-     * Occurs when the start date is later than the end date for a goal.
-     */
-    ERR_GOAL_DATE_RANGE_INVALID("The start date cannot be later than the end date of the goal."),
 
     /**
      * HTTP 429 - Too Many Requests.
