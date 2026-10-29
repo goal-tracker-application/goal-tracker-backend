@@ -283,7 +283,7 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         );
 
         // Act
-        authService.updatePassword(updateRequest);
+        authService.updatePassword(user.getId(), updateRequest);
 
         var loginResponse = authService.login(new LoginRequest(
                 "user@goaltracker.com",
@@ -293,6 +293,28 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(loginResponse.token()).isNotBlank();
         assertThat(loginResponse.email()).isEqualTo(user.getEmail());
         assertThat(loginResponse.isGuest()).isFalse();
+    }
+
+    /**
+     * Test case for password update failure when the current user does not exists.
+     * <p>
+     * This test verifies that the password update process fails with an {@link BadCredentialsException}
+     * when the provided current user does not exists.
+     * </p>
+     */
+    @Test
+    @DisplayName("updatePassword: Should throw exception when updating password when current user does not exists")
+    void updatePasswordUserNotFound() {
+
+        PasswordUpdateRequest updateRequest = new PasswordUpdateRequest(
+                "SecurePassword123:",
+                "NewSecurePassword456:",
+                "NewSecurePassword456:"
+        );
+
+        assertThatThrownBy(() -> authService.updatePassword(9999L, updateRequest))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
     }
 
     /**
@@ -322,8 +344,7 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
                 "NewSecurePassword456"
         );
 
-        // Act & Assert
-        assertThatThrownBy(() -> authService.updatePassword(updateRequest))
+        assertThatThrownBy(() -> authService.updatePassword(user.getId(), updateRequest))
                 .isInstanceOf(IncorrectCurrentPasswordException.class)
                 .hasMessageContaining(ErrorCode.INVALID_CURRENT_PASSWORD.getDefaultMessage());
     }
@@ -356,7 +377,7 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         );
 
         // Act & Assert
-        assertThatThrownBy(() -> authService.updatePassword(updateRequest))
+        assertThatThrownBy(() -> authService.updatePassword(user.getId(), updateRequest))
                 .isInstanceOf(PasswordMismatchException.class)
                 .hasMessageContaining(ErrorCode.ERR_PASSWORD_MISMATCH.getDefaultMessage());
     }
