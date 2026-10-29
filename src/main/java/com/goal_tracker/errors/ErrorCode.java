@@ -23,7 +23,7 @@ public enum ErrorCode {
      * HTTP 400 - Bad Request.
      * Occurs when the provided password does not match its confirmation.
      */
-    ERR_PASSWORD_MISMATCH("The provided password do not match it's confirmation."),
+    ERR_PASSWORD_MISMATCH("The provided password do not match its confirmation."),
     
     /**
      * HTTP 400 - Bad Request.
@@ -85,6 +85,25 @@ public enum ErrorCode {
      */
     ERR_GOAL_START_DATE_REQUIRED("The start date cannot be null for a goal that is in progress or paused."),
 
+
+   /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set or leave the start date as null while the end date is not null.
+     */
+    ERR_GOAL_START_DATE_REQUIRED_WHEN_END_DATE_PRESENT("The start date cannot be null while the end date is not null."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set the start date in the past.
+     */
+    ERR_GOAL_START_DATE_IN_PAST("The start date cannot be in the past."),
+
+    /**
+     * HTTP 400 - Bad Request.
+     * Occurs when attempting to set the end date before the start date.
+     */
+    ERR_GOAL_END_DATE_BEFORE_START("The end date cannot be before the start date."),
+
     /**
      * HTTP 401 - Unauthorized.
      * Occurs when the request lacks valid authentication credentials,
@@ -111,7 +130,7 @@ public enum ErrorCode {
      * Occurs when the HTTP method
      * is not supported by the endpoint.
      */
-    ERR_METHOD_NOT_SUPPORTED(""),
+    ERR_METHOD_NOT_SUPPORTED("The requested HTTP method is not supported by the endpoint."),
 
     /**
      * HTTP 409 - Conflict.
@@ -119,13 +138,6 @@ public enum ErrorCode {
      * that is already occupied by another account.
      */
     ERR_EMAIL_ALREADY_EXISTS("The entered email address is already registered."),
-
-    /**
-     * HTTP 409 - Conflict.
-     * Occurs when attempting to create a goal log (check-in) for a goal 
-     * on a date that already has an existing entry.
-     */
-    ERR_DUPLICATE_GOAL_LOG("A progress entry (check-in) for this goal already exists on the specified date."),
 
     /**
      * HTTP 429 - Too Many Requests.
