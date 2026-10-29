@@ -21,6 +21,8 @@ import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorResponse;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
+import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
+import com.goal_tracker.goals.dto.GoalStatusHistoryResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.service.GoalService;
@@ -145,6 +147,58 @@ public class GoalController {
             @AuthenticationPrincipal UserPrincipal principal) {
         GoalTreeResponseDto goalTree = goalService.getGoalTree(principal.id(), id);
         return ResponseEntity.ok(goalTree);
+    }
+
+    /**
+     * Retrieves the chronological timeline of status changes for a specific goal belonging to the authenticated user.
+     *
+     * @param goalId    the unique identifier of the target goal
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} containing the list of {@link GoalStatusHistoryResponseDto} timeline records
+     */
+    @GetMapping("/{id}/history")
+    @Operation(
+        summary = "Get goal status history",
+        description = "Retrieves the chronological timeline of status changes for a specific goal belonging to the authenticated user."
+    )
+    @ApiResponses({
+        @ApiResponse
+        (
+            responseCode = "200", 
+            description = "Successfully retrieved the status history timeline.",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = com.goal_tracker.goals.dto.GoalStatusHistoryResponseDto.class)))
+        ),
+        @ApiResponse
+        (
+            responseCode = "400", 
+            description = "Validation error or invalid goal identifier.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "403", 
+            description = "Access denied due to goal ownership mismatch.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse
+        (
+            responseCode = "404", 
+            description = "Goal not found.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
+    })
+    public ResponseEntity<List<GoalStatusHistoryResponseDto>> getGoalHistory(
+            @Parameter(description = "Numeric identifier of the target goal")
+            @PathVariable("id") @Min(value = 1, message = "Goal ID must be greater than or equal to 1.") Long goalId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        List<GoalStatusHistoryResponseDto> history = goalService.getGoalHistory(principal.id(), goalId);
+        return ResponseEntity.ok(history);
     }
 
     /**
@@ -278,7 +332,7 @@ public class GoalController {
     public ResponseEntity<GoalResponseDto> changeGoalStatus(
             @Parameter(description = "Numeric identifier of the target goal")
             @PathVariable("id") @Min(value = 1, message = "Goal ID must be greater than or equal to 1.") Long goalId,
-            @Valid @RequestBody com.goal_tracker.goals.dto.GoalStatusChangeRequestDto request,
+            @Valid @RequestBody GoalStatusChangeRequestDto request,
             @AuthenticationPrincipal UserPrincipal principal) {
         GoalResponseDto response = goalService.changeGoalStatus(principal.id(), goalId, request);
         return ResponseEntity.ok(response);
