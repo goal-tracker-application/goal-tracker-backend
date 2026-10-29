@@ -290,7 +290,7 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
         Goal root = new Goal(
             user.getId(),
             null,
-            "Root tittle",
+            "Root Title",
             "Desc",
             LocalDate.now().minusDays(2),
             LocalDate.now().plusDays(1),
@@ -345,7 +345,7 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
         Goal root = new Goal(
             user.getId(),
             null,
-            "Root tittle",
+            "Root Title",
             "Desc",
             LocalDate.now().minusDays(2),
             LocalDate.now().plusDays(1),
@@ -365,6 +365,118 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
         );
 
         mockMvc.perform(get("/goals/{id}/tree", root.getId())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Test to verify that an authenticated user can successfully retrieve a goal's status history via GET /goals/{id}/history.
+     * <p>
+     * Sets up a valid user, persists a goal and its initial status history record, injects the authentication context,
+     * performs a GET request, and expects a 200 OK response with the history timeline array.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to goal status history via GET /goals/{id}/history")
+    void shouldAllowAuthenticatedAccessToGoalHistory() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Goal for history",
+            "Description",
+            LocalDate.now().plusDays(1),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        goalStatusHistoryRepository.saveAndFlush(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, java.util.Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", goal.getId())
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].statusId").value(GoalStatusEnum.WAITING.getId()))
+                .andExpect(jsonPath("$[0].cause").value(StatusTransitionCauseEnum.CREATION.name()));
+    }
+
+    /**
+     * Test to verify that unauthenticated requests to retrieve goal status history via GET /goals/{id}/history are denied.
+     * <p>
+     * Sends a GET request without any security context or bearer token, expecting a 401 Unauthorized response
+     * along with the standard error structure.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should deny unauthenticated access to goal status history via GET /goals/{id}/history")
+    void shouldDenyUnauthenticatedAccessToGoalHistory() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Goal for history",
+            "Description",
+            LocalDate.now().plusDays(1),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        goalStatusHistoryRepository.saveAndFlush(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+
+        mockMvc.perform(get("/goals/{id}/history", goal.getId())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
