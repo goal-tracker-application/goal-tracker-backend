@@ -37,6 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.validation.beanvalidation.MethodValidationInterceptor;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 import com.goal_tracker.config.security.details.UserPrincipal;
@@ -275,6 +276,31 @@ public class GoalControllerUnitTest {
     }
 
     /**
+     * Tests GET /goals/roots failure when the current user is not found
+     */
+    @Test
+    @DisplayName("GET /goals/roots - Should return 401 Unauthorized when the current user is not found")
+    void getRootGoalsShouldReturn401WhenCurrentUserIsNotFOund() throws Exception {
+        Long notFoundUserId= 99999L;
+        UserPrincipal principal = new UserPrincipal(notFoundUserId, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context =SecurityContextHolder.getContext();
+
+        when(goalService.getRootGoals(eq(notFoundUserId), eq(GoalStatusEnum.IN_PROGRESS.getId())))
+                .thenThrow(new BadCredentialsException("Invalid credentials"));
+        
+        mockMvc.perform(get("/goals/roots")
+                        .with(securityContext(context))
+                        .param("status_id", String.valueOf(GoalStatusEnum.IN_PROGRESS.getId()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
      * Tests successful retrieval of a single goal tree structure with empty sub-goals.
      * 
      * @throws Exception if the MockMvc request execution fails
@@ -443,6 +469,35 @@ public class GoalControllerUnitTest {
     }
 
     /**
+     * Tests response handling when requesting a goal tree and having the current user not found, expecting a 401 Unauthorized status.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/tree - Should return 401 Unauthorized when the current user is not found")
+    void getGoalTreeShouldReturn401WhenCurrentUserNotFound() throws Exception {
+        Long notFoundUserId= 99999L;
+        UserPrincipal principal = new UserPrincipal(notFoundUserId, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.getGoalTree(notFoundUserId, 1L))
+                .thenThrow(new BadCredentialsException("Invalid credentials"));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/tree", 1L)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).getGoalTree(notFoundUserId, 1L);
+    }
+
+    /**
      * Tests response handling when requesting a goal tree belonging to another user, expecting a 403 Forbidden status.
      * 
      * @throws Exception if the MockMvc request execution fails
@@ -564,6 +619,34 @@ public class GoalControllerUnitTest {
         verify(goalService, never()).getGoalHistory(any(), eq(0L));
     }
 
+     /**
+     * Tests GET /goals/{id}/history failure when the current user is not found, expecting 401 Unauthorized.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/history - Should return 401 Unauthorized when the current user is not found")
+    void getGoalHistoryShouldReturn401WhenCurrentUserNotFound() throws Exception {
+        Long notFoundUserId= 99999L;
+        UserPrincipal principal = new UserPrincipal(notFoundUserId, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.getGoalHistory(eq(notFoundUserId), eq(1L)))
+                .thenThrow(new BadCredentialsException("Invalid credentials"));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", 1L)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).getGoalHistory(eq(notFoundUserId), eq(1L));
+    }
     /**
      * Tests GET /goals/{id}/history failure when goal belongs to another user, expecting 403 Forbidden.
      * 
@@ -940,6 +1023,44 @@ public class GoalControllerUnitTest {
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
 
         verify(goalService).createGoal(eq(TEST_USER_ID), any());
+    }
+
+    /**
+     * Tests POST /goals failure when the current user is not found, expecting 401 Unauthorized.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("POST /goals - Should return 401 Unauthorized when the current user is not found")
+    void createGoalShouldReturn401WhenCurrentUserNotFound() throws Exception {
+        Long notFoundUserId= 99999L;
+        UserPrincipal principal = new UserPrincipal(notFoundUserId, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.createGoal(eq(notFoundUserId), any()))
+                .thenThrow(new BadCredentialsException("Invalid credentials"));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalCreateRequestDto request = new GoalCreateRequestDto
+        (
+            "Goal", 
+            "Description", 
+            LocalDate.now(), 
+            LocalDate.now().plusDays(5),
+            1L
+        );
+        mockMvc.perform(post("/goals")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).createGoal(eq(notFoundUserId), any());
     }
 
     /**
@@ -1839,6 +1960,41 @@ public class GoalControllerUnitTest {
     }
 
     /**
+     * Tests PATCH /goals/{id}/status failure when current user not found returns 401 Unauthorized.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("PATCH /goals/{id}/status - Should return 401 Unauthorized when current user not found")
+    void changeGoalStatusShouldReturn401WhenCurrentUserNotFound() throws Exception {
+        Long notFoundUserId= 99999L;
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(notFoundUserId, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.changeGoalStatus(eq(notFoundUserId), eq(goalId), any()))
+                .thenThrow(new BadCredentialsException("Invalid credentials"));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        GoalStatusChangeRequestDto request = new GoalStatusChangeRequestDto(
+            GoalStatusEnum.IN_PROGRESS.getId(), "Set into march"
+        );
+
+        mockMvc.perform(patch("/goals/{id}/status", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).changeGoalStatus(eq(notFoundUserId), eq(goalId), any());
+    }
+
+    /**
      * Tests successful deletion of a goal via DELETE /goals/{id}.
      * 
      * @throws Exception if the MockMvc request execution fails
@@ -1909,6 +2065,36 @@ public class GoalControllerUnitTest {
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
 
         verify(goalService, never()).deleteGoal(any(), eq(0L));
+    }
+
+    /**
+     * Tests DELETE /goals/{id} failure when the current user is not found, expecting 401 Unauthorized.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("DELETE /goals/{id} - Should return 401 Unauthorized when the current user is not found")
+    void deleteGoalShouldReturn401WhenCurrentUserNotFound() throws Exception {
+        Long notFoundUserId= 99999L;
+        Long goalId = 50L;
+        UserPrincipal principal = new UserPrincipal(notFoundUserId, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        Mockito.doThrow(new BadCredentialsException("Invalid credentials"))
+                .when(goalService).deleteGoal(eq(notFoundUserId), eq(goalId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(delete("/goals/{id}", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).deleteGoal(eq(notFoundUserId), eq(goalId));
     }
 
     /**

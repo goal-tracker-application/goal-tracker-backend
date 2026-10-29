@@ -60,5 +60,11 @@ public abstract class AbstractIntegrationTest {
             entityManager.createNativeQuery("DELETE FROM goals").executeUpdate();
             entityManager.createNativeQuery("DELETE FROM goal_status_histories").executeUpdate();
         });
+
+        try {
+            redis.execInContainer("redis-cli", "FLUSHALL");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to flush Redis container during test setup", e);
+        }
     }
 }

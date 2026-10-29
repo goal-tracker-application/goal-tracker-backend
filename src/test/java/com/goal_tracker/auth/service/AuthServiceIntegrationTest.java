@@ -9,6 +9,12 @@ import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
+import com.goal_tracker.goals.entity.Goal;
+import com.goal_tracker.goals.entity.GoalStatusEnum;
+import com.goal_tracker.goals.entity.GoalStatusHistory;
+import com.goal_tracker.goals.entity.StatusTransitionCauseEnum;
+import com.goal_tracker.goals.repository.GoalRepository;
+import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;
 
@@ -27,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 /**
@@ -52,6 +59,18 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
      */
     @Autowired
     private UserRepository userRepository;
+
+    /**
+     * The goal repository used for verifying database state during tests. 
+     */
+    @Autowired
+    private GoalRepository goalRepository;
+
+    /**
+     * The goal history repository used for verifying database state during tests. 
+     */
+    @Autowired
+    private GoalStatusHistoryRepository goalStatusHistoryRepository;
 
     /**
      * Password encoder component.
@@ -283,7 +302,7 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         );
 
         // Act
-        authService.updatePassword(updateRequest);
+        authService.updatePassword(user.getId(), updateRequest);
 
         var loginResponse = authService.login(new LoginRequest(
                 "user@goaltracker.com",
@@ -293,6 +312,28 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(loginResponse.token()).isNotBlank();
         assertThat(loginResponse.email()).isEqualTo(user.getEmail());
         assertThat(loginResponse.isGuest()).isFalse();
+    }
+
+    /**
+     * Test case for password update failure when the current user does not exists.
+     * <p>
+     * This test verifies that the password update process fails with an {@link BadCredentialsException}
+     * when the provided current user does not exists.
+     * </p>
+     */
+    @Test
+    @DisplayName("updatePassword: Should throw exception when updating password when current user does not exists")
+    void updatePasswordUserNotFound() {
+
+        PasswordUpdateRequest updateRequest = new PasswordUpdateRequest(
+                "SecurePassword123:",
+                "NewSecurePassword456:",
+                "NewSecurePassword456:"
+        );
+
+        assertThatThrownBy(() -> authService.updatePassword(9999L, updateRequest))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
     }
 
     /**
@@ -322,8 +363,7 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
                 "NewSecurePassword456"
         );
 
-        // Act & Assert
-        assertThatThrownBy(() -> authService.updatePassword(updateRequest))
+        assertThatThrownBy(() -> authService.updatePassword(user.getId(), updateRequest))
                 .isInstanceOf(IncorrectCurrentPasswordException.class)
                 .hasMessageContaining(ErrorCode.INVALID_CURRENT_PASSWORD.getDefaultMessage());
     }
@@ -356,7 +396,7 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         );
 
         // Act & Assert
-        assertThatThrownBy(() -> authService.updatePassword(updateRequest))
+        assertThatThrownBy(() -> authService.updatePassword(user.getId(), updateRequest))
                 .isInstanceOf(PasswordMismatchException.class)
                 .hasMessageContaining(ErrorCode.ERR_PASSWORD_MISMATCH.getDefaultMessage());
     }
@@ -375,5 +415,92 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
                 userPrincipal, null, java.util.Collections.emptyList()
         );
         SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    /**
+     * Test case for successful deletion of a user who has associated goals and status histories.
+     * <p>
+     * This test verifies that deleting a user correctly cascades and removes their root goals,
+     * sub-goals, history entries, and finally the user record itself from the database.
+     * </p>
+     */
+    @Test
+    @DisplayName("deleteUser: Should successfully delete user along with associated goals and history")
+    void deleteUserSuccessWithGoalsAndHistory() {
+        User user = new User(
+            "delete.user@goaltracker.com",
+            passwordEncoder.encode("SecurePassword123:"),
+            false,
+            OffsetDateTime.now().plusDays(1)
+        );
+        user = userRepository.saveAndFlush(user);
+
+        Goal goal = new Goal(
+            user.getId(),
+            null,
+            "Root Goal to Delete",
+            "Description",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        goal = goalRepository.saveAndFlush(goal);
+
+        goalStatusHistoryRepository.saveAndFlush(
+            new GoalStatusHistory(
+                goal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+
+        Goal childGoal = new Goal(
+            user.getId(),
+            goal,
+            "Child Goal to Delete",
+            "Description",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.WAITING
+        );
+        childGoal = goalRepository.saveAndFlush(childGoal);
+
+        goalStatusHistoryRepository.saveAndFlush(
+            new GoalStatusHistory(
+                childGoal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+
+        Long userId = user.getId();
+
+        authService.deleteUser(userId);
+
+        assertThat(userRepository.existsById(userId)).isFalse();
+        assertThat(goalRepository.findById(goal.getId())).isEmpty();
+        assertThat(goalRepository.findById(childGoal.getId())).isEmpty();
+        assertThat(goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(goal.getId(), userId)).isEmpty();
+        assertThat(goalStatusHistoryRepository.findByGoalIdAndUserIdRecentFirst(childGoal.getId(), userId)).isEmpty();
+    }
+
+    /**
+     * Test case for deletion failure when the user does not exist.
+     * <p>
+     * This test verifies that attempting to delete a non-existent user throws a {@link BadCredentialsException}.
+     * </p>
+     */
+    @Test
+    @DisplayName("deleteUser: Should throw exception when attempting to delete a non-existent user")
+    void deleteUserNotFound() {
+        Long nonExistentUserId = 99999L;
+
+        assertThatThrownBy(() -> authService.deleteUser(nonExistentUserId))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
     }
 }

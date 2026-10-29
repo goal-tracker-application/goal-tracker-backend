@@ -134,6 +134,12 @@ This response payload is common to all the endpoints with a response payload in 
 
     - No payload is returned in the body after a successful password update.
 
+* **DELETE** `/auth/account` - Deletes the currently authenticated user account, along with all associated goals, recursive sub-goal trees, and status histories.
+
+    - This endpoint does not require a request body.
+
+    - No payload is returned in the body upon successful deletion (HTTP 204 No Content).
+
 ### 3.3 Goals (Authenticated)
 
 Endpoints under `/goals` require a valid JWT token passed in the `Authorization` header (`Bearer <token>`).
@@ -404,10 +410,11 @@ All API error responses are standardized under the `ErrorResponse` Data Transfer
 
 ## 4 Scheduled Jobs
 
-The application includes automated background components scheduled to run daily at midnight (`0 0 0 * * *`) to maintain the life-cycles of goals and ensure consistency:
+The application includes automated background components scheduled to run daily at midnight (`0 0 0 * * *`) to maintain system state, goal lifecycles, and database consistency:
 
 - **`GoalActivationJob`**: Scans for waiting goals whose start date has arrived or passed, automatically transitioning them to `IN_PROGRESS` and generating their corresponding status history record with the **`AUTO_ACTIVATION`** cause and all its descendants and ancestors that are `WAITING` or `PAUSED` will transition automatically to `IN_PROGRESS`, updating their start date to the current one, with `DOWNWARD_CASCADE` cause for the descendants and `UPWARD_CASCADE` cause for the ancestors.
 - **`GoalExpirationJob`**: Evaluates expired `IN_PROGRESS` goals from bottom to top (hierarchical post-order) and automatically marks them as `FAILED`, registering the status change history entry with the correct **`AUTO_FAILURE`** cause and all its descendants that were not on a terminal status already (`COMPLETED`, `FAILED` or `DISCARDED`) will transition automatically to `DISCARDED` with the cause being `DOWNWARD_CASCADE`.
+- **`GuestCleanupJob`**: Deletes all expired guest users along with all of their associated goals and status histories.
 
 ## 5. Testing
 
