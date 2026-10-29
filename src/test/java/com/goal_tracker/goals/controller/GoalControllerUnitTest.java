@@ -45,9 +45,11 @@ import com.goal_tracker.exceptions.GlobalExceptionHandler;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
 import com.goal_tracker.goals.dto.GoalResponseDto;
 import com.goal_tracker.goals.dto.GoalStatusChangeRequestDto;
+import com.goal_tracker.goals.dto.GoalStatusHistoryResponseDto;
 import com.goal_tracker.goals.dto.GoalTreeResponseDto;
 import com.goal_tracker.goals.dto.GoalUpdateRequestDto;
 import com.goal_tracker.goals.entity.GoalStatusEnum;
+import com.goal_tracker.goals.entity.StatusTransitionCauseEnum;
 import com.goal_tracker.goals.exceptions.GoalEndDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalOwnershipException;
@@ -55,6 +57,7 @@ import com.goal_tracker.goals.exceptions.GoalParentNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
+import com.goal_tracker.goals.exceptions.InvalidDateRangeException;
 import com.goal_tracker.goals.service.GoalService;
 
 import jakarta.validation.Validator;
@@ -466,6 +469,157 @@ public class GoalControllerUnitTest {
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
 
         verify(goalService).getGoalTree(TEST_USER_ID, otherUserGoalId);
+    }
+
+    /**
+     * Tests successful retrieval of the goal status history timeline via GET /goals/{id}/history.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/history - Should return goal status history successfully when id is valid and owned")
+    void getGoalHistoryShouldReturnSuccessfully() throws Exception {
+        Long goalId = 1L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        List<GoalStatusHistoryResponseDto> historyResponse = List.of(
+            new GoalStatusHistoryResponseDto(
+                GoalStatusEnum.WAITING.getId(),
+                StatusTransitionCauseEnum.CREATION.name(),
+                null,
+                OffsetDateTime.now().minusDays(1)
+            ),
+            new GoalStatusHistoryResponseDto(
+                GoalStatusEnum.IN_PROGRESS.getId(),
+                StatusTransitionCauseEnum.USER.name(),
+                "Started goal",
+                OffsetDateTime.now()
+            )
+        );
+
+        when(goalService.getGoalHistory(eq(TEST_USER_ID), eq(goalId))).thenReturn(historyResponse);
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", goalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$[0].statusId").value(GoalStatusEnum.WAITING.getId()))
+                .andExpect(jsonPath("$[0].cause").value(StatusTransitionCauseEnum.CREATION.name()))
+                .andExpect(jsonPath("$[1].statusId").value(GoalStatusEnum.IN_PROGRESS.getId()))
+                .andExpect(jsonPath("$[1].cause").value(StatusTransitionCauseEnum.USER.name()));
+
+        verify(goalService).getGoalHistory(eq(TEST_USER_ID), eq(goalId));
+    }
+
+    /**
+     * Tests GET /goals/{id}/history failure due to type mismatch in the path variable id.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/history - Should return 400 Bad Request when goal id has type mismatch")
+    void getGoalHistoryShouldReturn400WhenIdTypeMismatch() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", "invalidType")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).getGoalHistory(any(), any());
+    }
+
+    /**
+     * Tests GET /goals/{id}/history failure when goal id is zero or negative.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/history - Should return 400 Bad Request when goal id fails validation (zero or negative)")
+    void getGoalHistoryShouldReturn400WhenIdValidationFails() throws Exception {
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", 0L)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService, never()).getGoalHistory(any(), eq(0L));
+    }
+
+    /**
+     * Tests GET /goals/{id}/history failure when goal belongs to another user, expecting 403 Forbidden.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/history - Should return 403 Forbidden when goal belongs to another user")
+    void getGoalHistoryShouldReturn403WhenGoalNotOwned() throws Exception {
+        Long foreignGoalId = 50L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.getGoalHistory(eq(TEST_USER_ID), eq(foreignGoalId)))
+                .thenThrow(new GoalOwnershipException(foreignGoalId, TEST_USER_ID));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", foreignGoalId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_FORBIDDEN.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).getGoalHistory(eq(TEST_USER_ID), eq(foreignGoalId));
+    }
+
+    /**
+     * Tests GET /goals/{id}/history failure when the goal is not found, expecting 404 Not Found.
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("GET /goals/{id}/history - Should return 404 Not Found when goal does not exist")
+    void getGoalHistoryShouldReturn404WhenGoalNotFound() throws Exception {
+        Long nonexistentId = 99L;
+        UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+
+        when(goalService.getGoalHistory(eq(TEST_USER_ID), eq(nonexistentId)))
+                .thenThrow(new GoalNotFoundException(nonexistentId));
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(get("/goals/{id}/history", nonexistentId)
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_NOT_FOUND.name()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+
+        verify(goalService).getGoalHistory(eq(TEST_USER_ID), eq(nonexistentId));
     }
 
     /**
@@ -1102,6 +1256,8 @@ public class GoalControllerUnitTest {
             "startDate", LocalDate.now().minusDays(1),
             "endDate", LocalDate.now().plusDays(5)
         );
+        when(goalService.updateGoal(eq(TEST_USER_ID), eq(goalId), any()))
+        .thenThrow(new InvalidDateRangeException( LocalDate.now().minusDays(1)));
 
         mockMvc.perform(patch("/goals/{id}", goalId)
                         .with(securityContext(context))
@@ -1109,7 +1265,7 @@ public class GoalControllerUnitTest {
                         .content(objectMapper.writeValueAsString(payloadPastStart)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()));
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_START_DATE_IN_PAST.name()));
     }
 
 
@@ -1132,6 +1288,8 @@ public class GoalControllerUnitTest {
             "description", "desc",
             "endDate", LocalDate.now().plusDays(5)
         );
+        when(goalService.updateGoal(eq(TEST_USER_ID), eq(goalId), any()))
+        .thenThrow(new InvalidDateRangeException());
 
         mockMvc.perform(patch("/goals/{id}", goalId)
                         .with(securityContext(context))
@@ -1139,7 +1297,7 @@ public class GoalControllerUnitTest {
                         .content(objectMapper.writeValueAsString(invalidPayload)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()));
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_START_DATE_REQUIRED_WHEN_END_DATE_PRESENT.name()));
     }
 
 
@@ -1150,7 +1308,7 @@ public class GoalControllerUnitTest {
      */
     @Test
     @DisplayName("PATCH /goals/{id} - Should return 400 Bad Request for a payload with start date after end date")
-    void updateGoalShouldReturn400WhenStartDateIsAfterEndDatet() throws Exception {
+    void updateGoalShouldReturn400WhenStartDateIsAfterEndDate() throws Exception {
         Long goalId = 1L;
         UserPrincipal principal = new UserPrincipal(TEST_USER_ID, "owner@goaltracker.com");
         var auth = new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
@@ -1164,13 +1322,17 @@ public class GoalControllerUnitTest {
             "endDate", LocalDate.now()
         );
 
+        when(goalService.updateGoal(eq(TEST_USER_ID), eq(goalId), any()))
+                .thenThrow(new InvalidDateRangeException( LocalDate.now().plusDays(4), LocalDate.now()));
+
+
         mockMvc.perform(patch("/goals/{id}", goalId)
                         .with(securityContext(context))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payloadPastStart)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()));
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_GOAL_END_DATE_BEFORE_START.name()));
 
     }
 
