@@ -7,13 +7,11 @@ import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.exceptions.EmailAreadyInUseException;
 import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
-import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.config.security.provider.JwtProvider;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;
 
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -130,9 +128,11 @@ public class AuthService {
      * @throws PasswordMismatchException If the new passwords do not match.
      */
     @Transactional 
-    public void updatePassword(PasswordUpdateRequest request) {
-        UserPrincipal userPrincipal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        User user = userRepository.findById(userPrincipal.id()).get();
+    public void updatePassword(Long userId, PasswordUpdateRequest request) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
+        User user = userRepository.findById(userId).get();
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new IncorrectCurrentPasswordException();
