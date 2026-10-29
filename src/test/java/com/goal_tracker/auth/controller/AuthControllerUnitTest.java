@@ -422,7 +422,7 @@ class AuthControllerUnitTest {
         PasswordUpdateRequest request = new PasswordUpdateRequest("WrongCurrent123!", "NewSecurePass123!", "NewSecurePass123!");
 
         Mockito.doThrow(new IncorrectCurrentPasswordException())
-                .when(authService).updatePassword(any(PasswordUpdateRequest.class));
+                .when(authService).updatePassword(any(), any(PasswordUpdateRequest.class));
 
         // Act & Assert
         mockMvc.perform(patch("/auth/password")
@@ -445,7 +445,7 @@ class AuthControllerUnitTest {
         PasswordUpdateRequest request = new PasswordUpdateRequest("CurrentPass123!", "NewSecurePass123!", "DifferentPass123!");
 
         Mockito.doThrow(new PasswordMismatchException())
-                .when(authService).updatePassword(any(PasswordUpdateRequest.class));
+                .when(authService).updatePassword(any(), any(PasswordUpdateRequest.class));
 
         // Act & Assert
         mockMvc.perform(patch("/auth/password")
@@ -455,6 +455,28 @@ class AuthControllerUnitTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_PASSWORD_MISMATCH.name()))
                 .andExpect(jsonPath("$.message").value(ErrorCode.ERR_PASSWORD_MISMATCH.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests PATCH /auth/password failure when the current user is not found.
+     */
+    @Test
+    @DisplayName("PATCH /auth/password - Should return 401 Unauthorized when the current user is not found")
+    void updatePasswordShouldReturn401WhenCurrentUserNotFound() throws Exception {
+        // Arrange
+        PasswordUpdateRequest request = new PasswordUpdateRequest("CurrentPass123!", "NewSecurePass123!", "NewSecurePass123!");
+
+        Mockito.doThrow(new BadCredentialsException("Invalid credentials"))
+                .when(authService).updatePassword(any(), any(PasswordUpdateRequest.class));
+
+        mockMvc.perform(patch("/auth/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
                 .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
     }
 }
