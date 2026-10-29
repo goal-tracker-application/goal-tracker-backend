@@ -33,6 +33,7 @@ import com.goal_tracker.goals.exceptions.GoalStartDateViolationException;
 import com.goal_tracker.goals.exceptions.GoalStatusNotFoundException;
 import com.goal_tracker.goals.exceptions.GoalTerminalStateException;
 import com.goal_tracker.goals.exceptions.IllegalGoalTransitionException;
+import com.goal_tracker.goals.exceptions.InvalidDateRangeException;
 import com.goal_tracker.goals.repository.GoalRepository;
 import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
 import com.goal_tracker.users.entity.User;
@@ -2224,6 +2225,117 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
                 .isInstanceOf(GoalEndDateImmutableException.class);
+    }
+
+    /**
+     * Verifies that attempting to load an end date without an start date will throw an InvalidDateRangeException
+     * in a WAITING goal
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw InvalidDateRangeException when loading an end date without start date modifying end date of a WAITING goal")
+    void updateGoalInvalidDateRangeAusentStartDateAndPresentEndDate() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Waiting Goal",
+            "Desc",
+            null,
+            null,
+            GoalStatusEnum.WAITING
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", null, today.plusDays(10));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(InvalidDateRangeException.class);
+    }
+
+    /**
+     * Verifies that attempting to load an start date in the past will throw an InvalidDateRangeException
+     * in a WAITING goal
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw InvalidDateRangeException when loading an start date in the past of a WAITING goal")
+    void updateGoalInvalidDateRangePastStartDate() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Waiting Goal",
+            "Desc",
+            null,
+            null,
+            GoalStatusEnum.WAITING
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", today.minusDays(2), today.plusDays(10));
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(InvalidDateRangeException.class);
+    }
+
+    /**
+     * Verifies that attempting to load an end date before the start date will throw an InvalidDateRangeException
+     * in a WAITING goal
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw InvalidDateRangeException when loading an end date before the start date of a WAITING goal")
+    void updateGoalInvalidDateRangeAusentEndDateBeforeStartDate() {
+        LocalDate today = LocalDate.now();
+        Goal goal = new Goal(
+            testUser.getId(),
+            null,
+            "Waiting Goal",
+            "Desc",
+            null,
+            null,
+            GoalStatusEnum.WAITING
+        );
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedGoal,
+                GoalStatusEnum.WAITING,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now().minusDays(1)
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", today.plusDays(10),today );
+
+        assertThatThrownBy(() -> goalService.updateGoal(testUser.getId(), savedGoal.getId(), request))
+                .isInstanceOf(InvalidDateRangeException.class);
     }
 
     /**
