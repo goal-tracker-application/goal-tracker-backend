@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -473,6 +474,36 @@ class AuthControllerUnitTest {
         mockMvc.perform(patch("/auth/password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Tests successful user account deletion via DELETE /auth/account.
+     * Expects a 204 No Content response when the user account is deleted successfully.
+     */
+    @Test
+    @DisplayName("DELETE /auth/account - Should delete user account successfully and return 204")
+    void deleteAccountShouldReturn204WhenSuccessful() throws Exception {
+        // Act & Assert
+        mockMvc.perform(delete("/auth/account"))
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * Tests DELETE /auth/account failure when the user is not found in the database.
+     * Expects a 401 Unauthorized response.
+     */
+    @Test
+    @DisplayName("DELETE /auth/account - Should return 401 Unauthorized when user is not found")
+    void deleteAccountShouldReturn401WhenUserNotFound() throws Exception {
+        Mockito.doThrow(new BadCredentialsException("Invalid credentials"))
+                .when(authService).deleteUser(any());
+
+        mockMvc.perform(delete("/auth/account"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
