@@ -7,18 +7,19 @@ import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.exceptions.EmailAreadyInUseException;
 import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
-import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.config.security.provider.JwtProvider;
 import com.goal_tracker.users.entity.User;
 import com.goal_tracker.users.repository.UserRepository;
+import com.goal_tracker.goals.dto.GoalResponseDto;
+import com.goal_tracker.goals.service.GoalService;
 
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtTokenProvider;
+    private final GoalService goalService;
 
     /**
      * Constructor for dependency injection of the authentication service.
@@ -38,15 +40,18 @@ public class AuthService {
      * @param userRepository   User repository for data access.
      * @param passwordEncoder  Password encoder component.
      * @param jwtTokenProvider JWT token generation component.
+     * @param goalService Service to manage goals.
      */
     public AuthService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            JwtProvider jwtTokenProvider
+            JwtProvider jwtTokenProvider,
+            GoalService goalService
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.goalService = goalService;
     }
 
     /**
@@ -128,11 +133,14 @@ public class AuthService {
      * @param request DTO containing current password, new password, and confirmation.
      * @throws IncorrectCurrentPasswordException If the current password is incorrect.
      * @throws PasswordMismatchException If the new passwords do not match.
+     * @throws BadCredentialsException If the userId does not bellong to an existing user.
      */
     @Transactional 
-    public void updatePassword(PasswordUpdateRequest request) {
-        UserPrincipal userPrincipal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        User user = userRepository.findById(userPrincipal.id()).get();
+    public void updatePassword(Long userId, PasswordUpdateRequest request) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
+        User user = userRepository.findById(userId).get();
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new IncorrectCurrentPasswordException();
@@ -144,5 +152,38 @@ public class AuthService {
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+    }
+
+    /**
+     * Deletes a user account along with all associated root goals and their status histories.
+     *
+     * @param userId The unique identifier of the user to be deleted.
+     * @throws BadCredentialsException If the userId does not bellong to an existing user.
+     */
+    @Transactional
+    public void deleteUser(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
+
+        List<GoalResponseDto> rootGoals = goalService.getRootGoals(userId, null);
+
+        for (GoalResponseDto rootGoal : rootGoals) {
+            goalService.deleteGoal(userId, rootGoal.id());
+        }
+
+        userRepository.deleteById(userId);
+    }
+
+    /**
+     * Automatically deletes expired guest users along with all their associated goals and histories.
+     */
+    @Transactional
+    public void deleteExpiredGuests() {
+        List<User> expiredGuests = userRepository.findExpiredGuests();
+
+        for (User guest : expiredGuests) {
+            deleteUser(guest.getId());
+        }
     }
 }

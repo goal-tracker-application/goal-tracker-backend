@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -420,6 +421,28 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         // Act & Assert
         assertThatThrownBy(() -> goalService.createGoal(testUser.getId(), request))
                 .isInstanceOf(GoalEndDateViolationException.class);
+    }
+
+    /**
+     * Verifies that attempting to create a goal when the current user does not exists 
+     * throws a {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("createGoal: Should throw BadCredentialsException when the current user does not exists")
+    void createGoalCurrentUserNotFound() {
+        // Arrange
+        LocalDate futureDate = LocalDate.now().plusDays(5);
+        GoalCreateRequestDto request = new GoalCreateRequestDto(
+                "Learn Spring Boot",
+                "Master backend architecture",
+                futureDate,
+                futureDate.plusDays(10),
+                null
+        );
+
+        assertThatThrownBy(() -> goalService.createGoal(99999L, request))
+                .isInstanceOf(BadCredentialsException.class);
+
     }
 
     /**
@@ -1056,7 +1079,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to change the status of a non-existent goal throws a GoalNotFoundException.
+     * Verifies that attempting to change the status of a non-existent goal throws a {@link GoalNotFoundException}.
      */
     @Test
     @DisplayName("changeGoalStatus: Should throw GoalNotFoundException when goal does not exist")
@@ -1069,7 +1092,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to change the status of a goal belonging to another user throws a GoalOwnershipException.
+     * Verifies that attempting to change the status of a goal belonging to another user throws a {@link GoalOwnershipException}.
      */
     @Test
     @DisplayName("changeGoalStatus: Should throw GoalOwnershipException when goal belongs to another user")
@@ -1094,7 +1117,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to change a goal status to its current status throws an IllegalGoalTransitionException.
+     * Verifies that attempting to change a goal status to its current status throws an {@link IllegalGoalTransitionException}.
      */
     @Test
     @DisplayName("changeGoalStatus: Should throw IllegalGoalTransitionException when target status is identical to current status")
@@ -1110,7 +1133,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to modify a goal that has already reached a terminal state throws an IllegalGoalTransitionException.
+     * Verifies that attempting to modify a goal that has already reached a terminal state throws an {@link IllegalGoalTransitionException}.
      */
     @Test
     @DisplayName("changeGoalStatus: Should throw IllegalGoalTransitionException when attempting to modify a terminal goal")
@@ -1124,6 +1147,23 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> goalService.changeGoalStatus(testUser.getId(), savedGoal.getId(), request))
                 .isInstanceOf(IllegalGoalTransitionException.class);
     }
+
+    /**
+     * Verifies that attempting to modify a goal when the current user is not found throws an {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("changeGoalStatus: Should throw BadCredentialsException when the current user is not found")
+    void changeStatusCurrentUserNotFound() {
+        Goal goal = new Goal(testUser.getId(), null, "Done Task", "Desc", LocalDate.now(), LocalDate.now().plusDays(5), GoalStatusEnum.COMPLETED);
+        Goal savedGoal = goalRepository.save(goal);
+        goalRepository.flush();
+
+        var request = new GoalStatusChangeRequestDto(GoalStatusEnum.IN_PROGRESS.getId(), "Try to reopen");
+
+        assertThatThrownBy(() -> goalService.changeGoalStatus(99999L, savedGoal.getId(), request))
+                .isInstanceOf(BadCredentialsException.class);
+    }
+
 
     /**
      * Verifies that retrieving root goals with a valid status filter successfully returns matching root goals.
@@ -1175,7 +1215,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to retrieve root goals with an invalid status identifier throws a GoalStatusNotFoundException.
+     * Verifies that attempting to retrieve root goals with an invalid status identifier throws a {@link GoalStatusNotFoundException}.
      */
     @Test
     @DisplayName("getRootGoals: Should throw GoalStatusNotFoundException when invalid status ID is provided")
@@ -1183,6 +1223,17 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> goalService.getRootGoals(testUser.getId(), 99999))
                 .isInstanceOf(GoalStatusNotFoundException.class)
                 .hasMessageContaining("Goal status with ID 99999 was not found.");
+    }
+
+    /**
+     * Verifies that attempting to retrieve root goals when the current user is not found throws a {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("getRootGoals: Should throw BadCredentialsException when current user is not found")
+    void getRootGoalsCurrentUserNotFound() {
+        assertThatThrownBy(() -> goalService.getRootGoals(9999L, 1))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
     }
 
     /**
@@ -1288,7 +1339,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to retrieve a goal tree for a non-existent goal ID throws a GoalNotFoundException.
+     * Verifies that attempting to retrieve a goal tree for a non-existent goal ID throws a {@link GoalNotFoundException}.
      */
     @Test
     @DisplayName("getGoalTree: Should throw GoalNotFoundException when goal does not exist")
@@ -1299,7 +1350,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to retrieve a goal tree belonging to another user throws a GoalOwnershipException.
+     * Verifies that attempting to retrieve a goal tree belonging to another user throws a {@link GoalOwnershipException}.
      */
     @Test
     @DisplayName("getGoalTree: Should throw GoalOwnershipException when goal belongs to another user")
@@ -1330,6 +1381,40 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> goalService.getGoalTree(testUser.getId(), savedForeignGoal.getId()))
                 .isInstanceOf(GoalOwnershipException.class)
                 .hasMessageContaining(String.format("Goal with ID %d does not belong to user with ID %d.", foreignGoal.getId(), testUser.getId()));
+    }
+
+    /**
+     * Verifies that attempting to retrieve a goal tree when the current usar is not found a {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("getGoalTree: Should throw BadCredentialsException when the current user is not found")
+    void getGoalTreeCurrentUserNotFound() {
+        Goal foreignGoal = new Goal(
+                anotherUser.getId(),
+                null,
+                "Foreign Goal",
+                "Owned by another user",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedForeignGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        assertThatThrownBy(() -> goalService.getGoalTree(99999L, savedForeignGoal.getId()))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
     }
 
     /**
@@ -1415,7 +1500,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to retrieve goal history for a non-existent goal ID throws a GoalNotFoundException.
+     * Verifies that attempting to retrieve goal history for a non-existent goal ID throws a {@link GoalNotFoundException}.
      */
     @Test
     @DisplayName("getGoalHistory: Should throw GoalNotFoundException when goal does not exist")
@@ -1424,9 +1509,42 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(GoalNotFoundException.class)
                 .hasMessageContaining("Goal with ID 99999 was not found");
     }
+    /**
+     * Verifies that attempting to retrieve goal history when the current user is not found throws a {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("getGoalHistory: Should throw BadCredentialsException when the current user is not found")
+    void getGoalHistoryCurrentUserIsNotFound() {
+        Goal foreignGoal = new Goal(
+                anotherUser.getId(),
+                null,
+                "Foreign Goal",
+                "Owned by another user",
+                LocalDate.now(),
+                LocalDate.now().plusDays(5),
+                GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedForeignGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        assertThatThrownBy(() -> goalService.getGoalHistory(99999L, savedForeignGoal.getId()))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
+    }
 
     /**
-     * Verifies that attempting to retrieve goal history for a goal belonging to another user throws a GoalOwnershipException.
+     * Verifies that attempting to retrieve goal history for a goal belonging to another user throws a {@link GoalOwnershipException}.
      */
     @Test
     @DisplayName("getGoalHistory: Should throw GoalOwnershipException when goal belongs to another user")
@@ -2006,7 +2124,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to update a non-existent goal throws a GoalNotFoundException.
+     * Verifies that attempting to update a non-existent goal throws a {@link GoalNotFoundException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalNotFoundException when goal does not exist")
@@ -2019,7 +2137,43 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to update a goal belonging to another user throws a GoalOwnershipException.
+     * Verifies that attempting to update a goal when the current user is not found throws a {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("updateGoal: Should throw BadCredentialsException when the current user is not found")
+    void updateGoalCurrentUserNotFound() {
+        LocalDate today = LocalDate.now();
+        Goal foreignGoal = new Goal(
+            anotherUser.getId(),
+            null,
+            "Foreign Goal",
+            "Desc",
+            today,
+            today.plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalRepository.flush();
+
+        goalStatusHistoryRepository.save(
+            new GoalStatusHistory(
+                savedForeignGoal,
+                GoalStatusEnum.IN_PROGRESS,
+                StatusTransitionCauseEnum.CREATION,
+                null,
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+
+        var request = new GoalUpdateRequestDto("Title", "Desc", today, today.plusDays(5));
+
+        assertThatThrownBy(() -> goalService.updateGoal(9999L, savedForeignGoal.getId(), request))
+                .isInstanceOf(BadCredentialsException.class);
+    }
+
+    /**
+     * Verifies that attempting to update a goal belonging to another user throws a {@link GoalOwnershipException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalOwnershipException when goal belongs to another user")
@@ -2055,7 +2209,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to update a terminal goal throws a GoalTerminalStateException.
+     * Verifies that attempting to update a terminal goal throws a {@link GoalTerminalStateException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalTerminalStateException when goal is in a terminal state")
@@ -2102,7 +2256,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to modify the start date of an IN_PROGRESS goal throws a GoalStartDateImmutableException.
+     * Verifies that attempting to modify the start date of an IN_PROGRESS goal throws a {@link GoalStartDateImmutableException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalStartDateImmutableException when modifying start date of an IN_PROGRESS goal")
@@ -2138,7 +2292,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to clear the start date of a PAUSED goal throws a GoalStartDateRequiredException.
+     * Verifies that attempting to clear the start date of a PAUSED goal throws a {@link GoalStartDateRequiredException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalStartDateRequiredException when clearing start date of a PAUSED goal")
@@ -2181,7 +2335,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to modify the end date of a PAUSED goal throws a GoalEndDateImmutableException.
+     * Verifies that attempting to modify the end date of a PAUSED goal throws a {@link GoalEndDateImmutableException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalEndDateImmutableException when modifying end date of a PAUSED goal")
@@ -2228,7 +2382,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to load an end date without an start date will throw an InvalidDateRangeException
+     * Verifies that attempting to load an end date without an start date will throw an {@link InvalidDateRangeException}
      * in a WAITING goal
      */
     @Test
@@ -2265,7 +2419,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to load an start date in the past will throw an InvalidDateRangeException
+     * Verifies that attempting to load an start date in the past will throw an {@link InvalidDateRangeException}
      * in a WAITING goal
      */
     @Test
@@ -2302,7 +2456,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that attempting to load an end date before the start date will throw an InvalidDateRangeException
+     * Verifies that attempting to load an end date before the start date will throw an {@link InvalidDateRangeException}
      * in a WAITING goal
      */
     @Test
@@ -2339,7 +2493,7 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     /**
-     * Verifies that updating a goal with dates violating upward hierarchy throws a GoalStartDateViolationException.
+     * Verifies that updating a goal with dates violating upward hierarchy throws a {@link GoalStartDateViolationException}.
      */
     @Test
     @DisplayName("updateGoal: Should throw GoalStartDateViolationException when violating upward start date hierarchy")
@@ -2659,6 +2813,41 @@ class GoalServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> goalService.deleteGoal(testUser.getId(), 99999L))
                 .isInstanceOf(GoalNotFoundException.class)
                 .hasMessageContaining("Goal with ID 99999 was not found");
+    }
+
+    /**
+     * Verifies that attempting to delete a goal when the current user is not found throws a {@link BadCredentialsException}.
+     */
+    @Test
+    @DisplayName("deleteGoal: Should throw BadCredentialsException when the current user is not found")
+    void deleteGoalCurrentUserNotFound() {
+        Goal foreignGoal = new Goal(
+            anotherUser.getId(),
+            null,
+            "Foreign Goal",
+            "Owned by stranger",
+            LocalDate.now(),
+            LocalDate.now().plusDays(5),
+            GoalStatusEnum.IN_PROGRESS
+        );
+        Goal savedForeignGoal = goalRepository.save(foreignGoal);
+        goalStatusHistoryRepository.save
+        (
+            new GoalStatusHistory(
+                savedForeignGoal, 
+                GoalStatusEnum.IN_PROGRESS, 
+                StatusTransitionCauseEnum.CREATION, 
+                null, 
+                OffsetDateTime.now()
+            )
+        );
+        goalStatusHistoryRepository.flush();
+        
+        goalRepository.flush();
+
+        assertThatThrownBy(() -> goalService.deleteGoal(99999L, savedForeignGoal.getId()))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Invalid credentials");
     }
 
     /**

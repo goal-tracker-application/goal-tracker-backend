@@ -2,8 +2,10 @@ package com.goal_tracker.users.repository;
 
 import com.goal_tracker.users.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -30,4 +32,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return true if the email is already registered, false otherwise.
      */
     boolean existsByEmail(String email);
+
+    /**
+     * Finds guest users whose expiration timestamp has passed,
+     * intended for automatic deletion processing by the nocturnal scheduler.
+     *
+     * @return List of expired guest users.
+     */
+    @Query("SELECT u FROM User u WHERE u.isGuest = true AND u.expiresAt < CURRENT_TIMESTAMP")
+    List<User> findExpiredGuests();
 }

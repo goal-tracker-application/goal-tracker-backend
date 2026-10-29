@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,7 @@ import com.goal_tracker.goals.mapper.GoalMapper;
 import com.goal_tracker.goals.mapper.GoalStatusHistoryMapper;
 import com.goal_tracker.goals.repository.GoalRepository;
 import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
+import com.goal_tracker.users.repository.UserRepository;
 
 /**
  * Service handling business logic operations for goals management.
@@ -41,6 +43,7 @@ import com.goal_tracker.goals.repository.GoalStatusHistoryRepository;
 @Service
 public class GoalService {
 
+    private final UserRepository userRepository;
     private final GoalRepository goalRepository;
     private final GoalStatusHistoryRepository goalStatusHistoryRepository;
     private final GoalMapper goalMapper;
@@ -53,8 +56,9 @@ public class GoalService {
      * @param goalStatusHistoryRepository the repository for managing goal status history persistence and database operations
      * @param goalMapper                  the mapper used for converting between goal entities and data transfer objects
      */
-    public GoalService(GoalRepository goalRepository, GoalStatusHistoryRepository goalStatusHistoryRepository, GoalMapper goalMapper,  GoalStatusHistoryMapper goalStatusHistoryMapper) {
+    public GoalService(UserRepository userRepository, GoalRepository goalRepository, GoalStatusHistoryRepository goalStatusHistoryRepository, GoalMapper goalMapper,  GoalStatusHistoryMapper goalStatusHistoryMapper) {
         super();
+        this.userRepository = userRepository;
         this.goalRepository = goalRepository;
         this.goalStatusHistoryRepository = goalStatusHistoryRepository;
         this.goalMapper = goalMapper;
@@ -68,11 +72,15 @@ public class GoalService {
      * @param userId The identifier of the authenticated user creating the goal.
      * @param dto    The creation payload containing goal details.
      * @return The created goal exposed as an immutable response DTO.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalParentNotFoundException If the goal parent was not found.
      * @throws GoalOwnershipException      If the goal parent was not owned by the current user.
      */
     @Transactional
     public GoalResponseDto createGoal(Long userId, GoalCreateRequestDto dto) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         Goal parentGoal = null;
 
         if (dto.parentId() != null) {
@@ -239,6 +247,7 @@ public class GoalService {
      * @param goalId The ID of the goal to update.
      * @param dto    The request DTO containing the target status and optional notes.
      * @return The updated goal response DTO.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalNotFoundException           if the goal is not found.
      * @throws GoalOwnershipException          if the goal is not owned by the current user.
      * @throws IllegalGoalTransitionException  if the requested goal transition is illegal.
@@ -246,6 +255,9 @@ public class GoalService {
      */
     @Transactional
     public GoalResponseDto changeGoalStatus(Long userId, Long goalId, GoalStatusChangeRequestDto dto) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         Goal goal = goalRepository.findById(goalId)
             .orElseThrow(() -> new GoalNotFoundException(goalId));
 
@@ -479,10 +491,14 @@ public class GoalService {
      * @param userId       The unique identifier of the authenticated user owning the goals.
      * @param goalStatusId Optional numeric identifier to filter root goals by status.
      * @return A list of {@link GoalResponseDto} representing the filtered root-level goals.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalStatusNotFoundException if the provided status identifier is invalid or non-existent.
      */
     @Transactional(readOnly = true)
     public List<GoalResponseDto> getRootGoals(Long userId, Integer goalStatusId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         GoalStatusEnum status = null;
 
         if (goalStatusId != null) {
@@ -514,11 +530,15 @@ public class GoalService {
      * @param userId The unique identifier of the authenticated user requesting the goal tree.
      * @param goalId The unique identifier of the target root goal.
      * @return A hierarchical {@link GoalTreeResponseDto} representing the goal and its nested sub-goals.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalNotFoundException  if the goal does not exist.
      * @throws GoalOwnershipException if the goal does not belong to the authenticated user.
      */
     @Transactional(readOnly = true)
     public GoalTreeResponseDto getGoalTree(Long userId, Long goalId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         Goal goal = goalRepository.findById(goalId)
             .orElseThrow(() -> new GoalNotFoundException(goalId));
 
@@ -541,11 +561,15 @@ public class GoalService {
      * @param userId The unique identifier of the authenticated user owning the goal.
      * @param goalId The unique identifier of the target goal.
      * @return A list of {@link GoalStatusHistoryResponseDto} representing the status change timeline.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalNotFoundException  if the goal does not exist.
      * @throws GoalOwnershipException if the goal does not belong to the authenticated user.
      */
     @Transactional(readOnly = true)
     public List<GoalStatusHistoryResponseDto> getGoalHistory(Long userId, Long goalId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         Goal goal = goalRepository.findById(goalId)
             .orElseThrow(() -> new GoalNotFoundException(goalId));
 
@@ -570,6 +594,7 @@ public class GoalService {
      * @param goalId The unique identifier of the goal to update.
      * @param dto    The update payload containing the modified details.
      * @return An immutable {@link GoalResponseDto} representing the updated goal.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalNotFoundException           if the goal does not exist.
      * @throws GoalOwnershipException          if the goal does not belong to the authenticated user.
      * @throws GoalTerminalStateException      if the goal has reached a terminal state and cannot be modified.
@@ -579,6 +604,9 @@ public class GoalService {
      */
     @Transactional
     public GoalResponseDto updateGoal(Long userId, Long goalId, GoalUpdateRequestDto dto) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         Goal goal = goalRepository.findById(goalId)
             .orElseThrow(() -> new GoalNotFoundException(goalId));
 
@@ -728,11 +756,15 @@ public class GoalService {
      *
      * @param userId The unique identifier of the authenticated user performing the deletion.
      * @param goalId The unique identifier of the goal to delete.
+     * @throws BadCredentialsException if the userId does not bellong to an existing user.
      * @throws GoalNotFoundException  if the goal does not exist.
      * @throws GoalOwnershipException if the goal does not belong to the authenticated user.
      */
     @Transactional
     public void deleteGoal(Long userId, Long goalId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
         Goal goal = goalRepository.findById(goalId)
             .orElseThrow(() -> new GoalNotFoundException(goalId));
 

@@ -5,6 +5,7 @@ import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.service.AuthService;
+import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,7 +18,9 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -149,6 +152,7 @@ public class AuthController {
      * Updates the password of the currently authenticated user.
      *
      * @param request DTO containing current password, new password, and confirmation.
+     * @param principal   the currently authenticated user principal extracted from security context
      * @return {@link ResponseEntity} with HTTP 204 (No Content) on success.
      */
     @PatchMapping("/password")
@@ -175,8 +179,38 @@ public class AuthController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
-    public ResponseEntity<Void> updatePassword(@Valid @RequestBody PasswordUpdateRequest request) {
-        authService.updatePassword(request);
+    public ResponseEntity<Void> updatePassword(
+        @Valid @RequestBody PasswordUpdateRequest request,
+        @AuthenticationPrincipal UserPrincipal principal) {
+        authService.updatePassword(principal.id(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Deletes the currently authenticated user account and all associated data.
+     *
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} with HTTP 204 (No Content) upon successful deletion
+     */
+    @DeleteMapping("/account")
+    @Operation(
+        summary = "Delete user account",
+        description = "Deletes the currently authenticated user account, along with all associated goals, recursive sub-goal trees, and status histories."
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "204", 
+            description = "User account and all associated data successfully deleted."
+        ),
+        @ApiResponse(
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
+    })
+    public ResponseEntity<Void> deleteAccount(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        authService.deleteUser(principal.id());
         return ResponseEntity.noContent().build();
     }
 }
