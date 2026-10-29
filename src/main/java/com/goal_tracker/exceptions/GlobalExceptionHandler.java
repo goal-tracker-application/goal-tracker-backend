@@ -11,10 +11,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -262,13 +264,63 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFoundException(NoResourceFoundException ex) {
+        String errorId = generateTrackingId();
+
+        log.info("[{}] Requested resource not found. Code: '{}', Detail: '{}'",
+            errorId, ErrorCode.ERR_NOT_FOUND.name(), ex.getMessage());
+
         ErrorResponse errorResponse = new ErrorResponse(
             ErrorCode.ERR_NOT_FOUND.name(),
             ErrorCode.ERR_NOT_FOUND.getDefaultMessage(),
             ex.getMessage(),
-            generateTrackingId()
+            errorId
         );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+
+    /**
+     * Handles {@link NoHandlerFoundException} when a requested static resource or endpoint cannot be found.
+     *
+     * @param ex the thrown resource not found exception.
+     * @return a structured {@link ResponseEntity} containing error details with an HTTP 404 status.
+     */
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoHandlerFoundException(NoHandlerFoundException ex) {
+        String errorId = generateTrackingId();
+
+        log.info("[{}] Requested resource not found. Code: '{}', Detail: '{}'",
+            errorId, ErrorCode.ERR_NOT_FOUND.name(), ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+            ErrorCode.ERR_NOT_FOUND.name(),
+            ErrorCode.ERR_NOT_FOUND.getDefaultMessage(),
+            ex.getMessage(),
+            errorId
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    /**
+     * Handles {@link HttpRequestMethodNotSupportedException} when an HTTP method is not supported by the endpoint.
+     *
+     * @param ex the thrown method not supportd exception
+     * @return a structured {@link ResponseEntity} containing error details with an HTTP 405 status.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleHttpRequestMethodNotSupportedException(HttpRequestMethodNotSupportedException ex) {
+        String errorId = generateTrackingId();
+
+        log.info("[{}] HTTP method not supported by the endpoint. Code: '{}', Detail: '{}'",
+            errorId, ErrorCode.ERR_METHOD_NOT_SUPPORTED.name(), ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+            ErrorCode.ERR_METHOD_NOT_SUPPORTED.name(),
+            ErrorCode.ERR_METHOD_NOT_SUPPORTED.getDefaultMessage(),
+            ex.getMessage(),
+            errorId
+        );
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(errorResponse);
     }
 
     /**
