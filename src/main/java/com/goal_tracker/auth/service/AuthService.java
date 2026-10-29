@@ -174,4 +174,16 @@ public class AuthService {
 
         userRepository.deleteById(userId);
     }
+
+    /**
+     * Automatically deletes expired guest users along with all their associated goals and histories.
+     */
+    @Transactional
+    public void deleteExpiredGuests() {
+        List<User> expiredGuests = userRepository.findExpiredGuests();
+
+        for (User guest : expiredGuests) {
+            deleteUser(guest.getId());
+        }
+    }
 }
