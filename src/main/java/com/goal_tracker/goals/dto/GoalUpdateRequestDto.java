@@ -1,7 +1,5 @@
 package com.goal_tracker.goals.dto;
 
-import com.goal_tracker.goals.validation.DateRangeAware;
-import com.goal_tracker.goals.validation.ValidDateRange;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -11,7 +9,6 @@ import java.time.LocalDate;
  * Immutable record DTO for updating an existing goal's basic properties,
  * featuring field-level validations and cross-field date range integrity checks.
  */
-@ValidDateRange
 public record GoalUpdateRequestDto(
     /**
      * The updated title of the goal. Must not be blank and cannot exceed 255 characters.
@@ -35,21 +32,5 @@ public record GoalUpdateRequestDto(
      * The updated planned end date. Optional, but restricted by cross-field validation rules (requires startDate).
      */
     LocalDate endDate
-) implements DateRangeAware {
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public LocalDate getStartDate() {
-        return this.startDate;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public LocalDate getEndDate() {
-        return this.endDate;
-    }
+) {
 }
