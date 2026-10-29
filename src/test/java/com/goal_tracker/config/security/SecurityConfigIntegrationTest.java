@@ -31,12 +31,14 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.hamcrest.Matchers.startsWith;
@@ -856,6 +858,62 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
         goal = goalRepository.saveAndFlush(goal);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/goals/{id}", goal.getId())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_UNAUTHORIZED.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_UNAUTHORIZED.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
+     * Test to verify that an authenticated user can successfully delete their account via DELETE /auth/account.
+     * <p>
+     * Sets up a valid user, injects the authentication context, performs a DELETE request to /auth/account,
+     * and expects a 204 No Content response.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should allow authenticated access to delete account via DELETE /auth/account")
+    void shouldAllowAuthenticatedAccessToDeleteAccount() throws Exception {
+        String email = "login.security@example.com";
+        String rawPassword = "CurrentPass123!";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setIsGuest(false);
+        user.setCreatedAt(OffsetDateTime.now().minusDays(1));
+        userRepository.saveAndFlush(user);
+
+        var userPrincipal = new UserPrincipal(user.getId(), email);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userPrincipal, null, Collections.emptyList()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        mockMvc.perform(MockMvcRequestBuilders.delete("/auth/account")
+                        .with(securityContext(context))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * Test to verify that unauthenticated requests to delete an account via DELETE /auth/account are denied.
+     * <p>
+     * Sends a DELETE request without any security context or bearer token, expecting a 401 Unauthorized response
+     * along with the standard error structure.
+     * </p>
+     * 
+     * @throws Exception if the MockMvc request execution fails
+     */
+    @Test
+    @DisplayName("Security Config - Should deny unauthenticated access to delete account via DELETE /auth/account")
+    void shouldDenyUnauthenticatedAccessToDeleteAccount() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.delete("/auth/account")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
