@@ -21,7 +21,7 @@ public class SchedulerConfig {
     public ThreadPoolTaskScheduler taskScheduler() {
         ThreadPoolTaskScheduler threadPoolTaskScheduler = new ThreadPoolTaskScheduler();
         
-        threadPoolTaskScheduler.setPoolSize(4);
+        threadPoolTaskScheduler.setPoolSize(3);
         
         threadPoolTaskScheduler.setThreadNamePrefix("goal-tracker-cron-pool-");
         
