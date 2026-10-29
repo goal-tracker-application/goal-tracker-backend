@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -182,6 +183,34 @@ public class AuthController {
         @Valid @RequestBody PasswordUpdateRequest request,
         @AuthenticationPrincipal UserPrincipal principal) {
         authService.updatePassword(principal.id(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Deletes the currently authenticated user account and all associated data.
+     *
+     * @param principal the currently authenticated user principal extracted from security context
+     * @return a {@link ResponseEntity} with HTTP 204 (No Content) upon successful deletion
+     */
+    @DeleteMapping("/account")
+    @Operation(
+        summary = "Delete user account",
+        description = "Deletes the currently authenticated user account, along with all associated goals, recursive sub-goal trees, and status histories."
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "204", 
+            description = "User account and all associated data successfully deleted."
+        ),
+        @ApiResponse(
+            responseCode = "401", 
+            description = "Unauthorized access or missing valid JWT token.",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
+    })
+    public ResponseEntity<Void> deleteAccount(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        authService.deleteUser(principal.id());
         return ResponseEntity.noContent().build();
     }
 }
