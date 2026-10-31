@@ -2,9 +2,11 @@ package com.goal_tracker.config.security;
 
 import tools.jackson.databind.ObjectMapper;
 import com.goal_tracker.AbstractIntegrationTest;
+import com.goal_tracker.auth.dto.GuestRequest;
 import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
+import com.goal_tracker.auth.service.CaptchaValidationService;
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.goals.dto.GoalCreateRequestDto;
@@ -30,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -41,6 +44,7 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.doNothing;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -78,6 +82,9 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @MockitoBean
+    private CaptchaValidationService captchaValidationService;
 
     private MockMvc mockMvc;
 
@@ -146,7 +153,16 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Security Config - Should allow unauthenticated access to /auth/register")
     void shouldAllowUnauthenticatedAccessToRegister() throws Exception {
-        RegisterRequest request = new RegisterRequest("test.security@example.com", "SecurePass123!", "SecurePass123!");
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+
+        RegisterRequest request = new RegisterRequest
+        (
+            "test.security@example.com", 
+            "SecurePass123!", 
+            "SecurePass123!",
+            validCaptchaToken
+        );
 
         mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -179,8 +195,12 @@ class SecurityConfigIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Security Config - Should allow unauthenticated access to /auth/guest")
     void shouldAllowUnauthenticatedAccessToGuest() throws Exception {
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        GuestRequest request = new GuestRequest(validCaptchaToken);
         mockMvc.perform(post("/auth/guest")
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
     }
 
