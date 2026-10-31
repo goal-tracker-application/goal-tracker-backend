@@ -12,10 +12,13 @@ La aplicación se configura mediante propiedades en el archivo de configuración
 - **Redis (Caché y Rate Limiting):** Configurado a través de `REDIS_HOST` y `REDIS_PORT` para establecer la conexión para la persistencia de estados (utilizando por defecto `localhost` y `6379` para entornos locales).
 - **Seguridad y JWT:** El secreto para la firma de los tokens y su tiempo de expiración se configuran a través de `APP_SECURITY_JWT_SECRET` y `APP_SECURITY_JWT_EXPIRATION_MS` (con un valor por defecto seguro para pruebas locales).
 - **Rate Limiting (Protección IP):** Se gestiona bajo el prefijo `app.security.rate-limit` y permite configurar la capacidad máxima, la tasa de recarga y su periodicidad mediante variables de entorno:
-  - `APP_SECURITY_RATE_LIMIT_CAPACITY` (por defecto: `5` tokens).
-  - `APP_SECURITY_RATE_LIMIT_REFILL_TOKENS` (por defecto: `5` tokens).
-  - `APP_SECURITY_RATE_LIMIT_REFILL_DURATION_MINUTES` (por defecto: `1` minuto).
+  * `APP_SECURITY_RATE_LIMIT_CAPACITY` (por defecto: `5` tokens).
+  * `APP_SECURITY_RATE_LIMIT_REFILL_TOKENS` (por defecto: `5` tokens).
+  * `APP_SECURITY_RATE_LIMIT_REFILL_DURATION_MINUTES` (por defecto: `1` minuto).
 - **CORS:** Los orígenes permitidos para peticiones de clientes externos se gestionan mediante `APP_SECURITY_CORS_ALLOWED_ORIGINS`.
+- **Validación de CAPTCHA:** Configurado bajo el prefijo `app.security.captcha` para verificar los tokens del frontend con proveedores externos (como Google reCAPTCHA o Cloudflare Turnstile):
+  * `CAPTCHA_SECRET_KEY` (por defecto: `dummy-secret-key`).
+  * `CAPTCHA_VERIFY_URL` (por defecto: `https://www.google.com/recaptcha/api/siteverify`).
 - **Ruta Base (Context Path):** Todos los endpoints de la API se exponen bajo el prefijo `/api`.
 - **Perfiles:** Se pueden activar perfiles específicos como `dev` (que habilita logs detallados de SQL y consultas en Hibernate para debugging) o `prod`.
 
@@ -36,6 +39,10 @@ CORS está configurado globalmente para permitir que clientes autorizados (como 
 ### 2.4 Rate Limiting (Protección basada en IP)
 
 Para proteger los endpoints de autenticación y registro (`/auth/**`) contra ataques de fuerza bruta y abusos automatizados, la aplicación implementa un mecanismo distribuido de limitación de tasa (*rate-limiting*) basado en IP respaldado por **Redis** y **Bucket4j**. Las solicitudes que superan el umbral configurado son interceptadas y bloqueadas con una respuesta **HTTP 429 (Too Many Requests)**.
+
+### 2.5 Protección CAPTCHA
+
+Para prevenir el abuso automatizado de bots, el spam y la creación masiva de cuentas, los endpoints públicos críticos (`/auth/register` y `/auth/guest`) requieren un token de CAPTCHA válido (compatible con Google reCAPTCHA o Cloudflare Turnstile). Las solicitudes con tokens faltantes, en blanco o inválidos son interceptadas y rechazadas con una respuesta **HTTP 400 (Bad Request)** (`ERR_INVALID_CAPTCHA`).
 
 ## 3. Endpoints
 
@@ -80,19 +87,21 @@ Este payload de respuesta es común para todos los endpoints con payload de resp
     * `isGuest`: Indicador de si el usuario es invitado (`false` para usuarios regulares).
 
 #### 3.2.2 Endpoints
-* **POST** `/auth/register` - Valida los datos de registro, crea una cuenta de usuario regular y devuelve un JWT de acceso.
+* **POST** `/auth/register` - Valida los datos de registro, crea una cuenta de usuario regular despues de validar el token del captcha y devuelve un JWT de acceso.
     - **Ejemplo de Payload de Solicitud:**
     ```json
     {
         "email": "test@example.com",
         "password": "SecurePassword123!",
-        "confirmPassword": "SecurePassword123!"
+        "confirmPassword": "SecurePassword123!",
+        "captchaToken": "dummy-captcha-token-from-frontend"
     }
     ```
     - **Detalles de los atributos de solicitud:**
         * `email`: Correo electrónico del usuario (debe ser válido y único).
         * `password`: Contraseña de la cuenta (debe cumplir con las políticas de seguridad: de 10 a 72 caracteres, al menos una letra mayúscula, un número y un carácter especial).
         * `confirmPassword`: Confirmación de la contraseña (debe coincidir exactamente con `password`).
+        * `captchaToken`: Token generado por el widget de verificación de CAPTCHA del cliente (obligatorio).
 
     - **Payload de Respuesta (AuthResponse)**: Este endpoint responde con un JSON **AuthResponse** como el ejemplificado en la [sección 3.2.1](#321-payload-de-respuesta-comun).
 
@@ -110,9 +119,16 @@ Este payload de respuesta es común para todos los endpoints con payload de resp
 
     - **Payload de Respuesta (AuthResponse)**: Este endpoint responde con un JSON **AuthResponse** como el ejemplificado en la [sección 3.2.1](#321-payload-de-respuesta-comun).
 
-* **POST** `/auth/guest` - Aprovisiona una cuenta temporal de usuario invitado y devuelve un JWT de acceso.
+* **POST** `/auth/guest` - Aprovisiona una cuenta temporal de usuario invitado despues de validar el token del captcha y devuelve un JWT de acceso.
     
-    - Este endpoint no requiere un cuerpo de solicitud.
+    - **Ejemplo de Payload de la Solicitud:**
+    ```json
+    {
+        "captchaToken": "dummy-captcha-token-from-frontend"
+    }
+    ```
+    - **Detalles de los Atributos de la Solicitud:**
+        * `captchaToken`: Token generado por el widget de verificación de CAPTCHA del cliente (obligatorio).
 
     - **Payload de Respuesta (AuthResponse)**: Este endpoint responde con un JSON **AuthResponse** como el ejemplificado en la [sección 3.2.1](#321-payload-de-respuesta-comun).
 
@@ -398,6 +414,7 @@ Todas las respuestas de error de la API están estandarizadas bajo el Objeto de 
 | `ERR_GOAL_START_DATE_REQUIRED_WHEN_END_DATE_PRESENT` | La fecha de inicio no puede ser nula cuando la fecha de fin no es nula.| 400 Bad Request |
 | `ERR_GOAL_START_DATE_IN_PAST` | La fecha de inicio no puede estar en el pasado.| 400 Bad Request |
 | `ERR_GOAL_END_DATE_BEFORE_START` | La fecha de fin no puede ser anterior a la fecha de inicio.| 400 Bad Request |
+| `ERR_INVALID_CAPTCHA` | La validación de CAPTCHA proporcionada falló o no es válida. | 400 Bad Request |
 | `ERR_UNAUTHORIZED` | La petición carece de credenciales de autenticación válidas, el token ha expirado o los datos de acceso proporcionados son incorrectos. | 401 Unauthorized |
 | `ERR_FORBIDDEN` | El usuario autenticado intenta acceder a un recurso o realizar una acción para la cual carece de permisos suficientes. | 403 Forbidden |
 | `ERR_NOT_FOUND` | El recurso solicitado no existe en la base de datos o no se encuentra activo en el sistema. | 404 Not Found |
