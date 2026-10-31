@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Size;
  * @param email           Unique email address used for login (max 320 characters).
  * @param password        Plain text password (between 8 and 72 characters due to BCrypt truncation limits).
  * @param confirmPassword Password confirmation for cross-validation.
+ * @param captchaToken    Token provided by the client's CAPTCHA verification widget.
  */
 public record RegisterRequest(
     @NotBlank(message = "Email is required")
@@ -25,7 +26,11 @@ public record RegisterRequest(
     String password,
 
     @NotBlank(message = "Password confirmation is required")
-    String confirmPassword
+    String confirmPassword,
+
+
+    @NotBlank(message = "Captcha token is required")
+    String captchaToken
 ) {
     /**
      * Utility method to check if the entered passwords match.

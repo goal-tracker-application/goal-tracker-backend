@@ -105,6 +105,12 @@ public enum ErrorCode {
     ERR_GOAL_END_DATE_BEFORE_START("The end date cannot be before the start date."),
 
     /**
+     * HTTP 400 - Bad Request.
+     * Occurs when the provided Captcha token is missing, blank, or invalid.
+     */
+    ERR_INVALID_CAPTCHA("The provided CAPTCHA validation failed or is invalid."),
+    
+    /**
      * HTTP 401 - Unauthorized.
      * Occurs when the request lacks valid authentication credentials,
      * the token has expired, or the provided access data is incorrect.

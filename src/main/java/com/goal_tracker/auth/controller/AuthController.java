@@ -1,6 +1,7 @@
 package com.goal_tracker.auth.controller;
 
 import com.goal_tracker.auth.dto.AuthResponse;
+import com.goal_tracker.auth.dto.GuestRequest;
 import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
@@ -127,7 +128,7 @@ public class AuthController {
 
     /**
      * Creates a temporary guest user.
-     *
+     * @param request DTO containing captcha token.
      * @return {@link ResponseEntity} with HTTP 201 (Created) and the guest's {@link AuthResponse}.
      */
     @PostMapping("/guest")
@@ -143,8 +144,8 @@ public class AuthController {
             content = @Content(schema = @Schema(implementation = AuthResponse.class))
         )
     })
-    public ResponseEntity<AuthResponse> createGuest() {
-        AuthResponse response = authService.createGuest();
+    public ResponseEntity<AuthResponse> createGuest(@Valid @RequestBody GuestRequest request) {
+        AuthResponse response = authService.createGuest(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

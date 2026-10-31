@@ -1,11 +1,14 @@
 package com.goal_tracker.auth.service;
 
 import com.goal_tracker.AbstractIntegrationTest;
+import com.goal_tracker.auth.dto.CaptchaResponseDto;
+import com.goal_tracker.auth.dto.GuestRequest;
 import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.exceptions.EmailAreadyInUseException;
 import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
+import com.goal_tracker.auth.exceptions.InvalidCaptchaException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
 import com.goal_tracker.config.security.details.UserPrincipal;
 import com.goal_tracker.errors.ErrorCode;
@@ -28,10 +31,13 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -77,6 +83,9 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
      */
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @MockitoBean
+    private CaptchaValidationService captchaValidationService;
     /**
      * Test case for successful user registration.
      * <p>
@@ -87,12 +96,17 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("register: Should successfully register a new regular user")
     void registerSuccess() {
+        String validCaptchaToken = "dummy-valid-captcha-token";
         // Arrange
         RegisterRequest request = new RegisterRequest(
                 "user@goaltracker.com",
                 "SecurePassword123:",
-                "SecurePassword123:"
+                "SecurePassword123:",
+                validCaptchaToken
         );
+
+
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
 
         // Act
         var response = authService.register(request);
@@ -116,12 +130,16 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("register: Should throw exception when passwords do not match during registration")
     void registerPasswordsDoNotMatch() {
+
+        String validCaptchaToken = "dummy-valid-captcha-token";
         // Arrange
         RegisterRequest request = new RegisterRequest(
                 "user@goaltracker.com",
                 "SecurePassword123:",
-                "DifferentPassword123:"
+                "DifferentPassword123:",
+                validCaptchaToken
         );
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
 
         // Act & Assert
         assertThatThrownBy(() -> authService.register(request))
@@ -150,16 +168,48 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
         userRepository.save(duplicateUser);
         userRepository.flush();
 
+        String validCaptchaToken = "dummy-valid-captcha-token";
         RegisterRequest duplicateRequest = new RegisterRequest(
                 "duplicate@goaltracker.com",
                 "AnotherPassword123:",
-                "AnotherPassword123:"
+                "AnotherPassword123:",
+                validCaptchaToken
         );
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
 
         // Act & Assert
         assertThatThrownBy(() -> authService.register(duplicateRequest))
                 .isInstanceOf(EmailAreadyInUseException.class) 
                 .hasMessageContaining(String.format("The email: %s is already in use", "duplicate@goaltracker.com"));
+    }
+
+    /**
+     * Test case for registration failure when captcha token is invalid.
+     * <p>
+     * This test verifies that the registration process fails thorwing  a {@link InvalidCaptchaException} when the provided captcha token is invalid.
+     * </p>
+     */
+    @Test
+    @DisplayName("register: Should throw InvalidCaptchaException when the captcha token is invalid")
+    void registerInvalidCaptchaToken() {
+
+        String invalidCaptchaToken = "invalid";
+        // Arrange
+        RegisterRequest request = new RegisterRequest(
+                "user@goaltracker.com",
+                "SecurePassword123:",
+                "DifferentPassword123:",
+                invalidCaptchaToken
+        );
+
+        CaptchaResponseDto captchaResponse = new CaptchaResponseDto(false);
+        doThrow(new InvalidCaptchaException(captchaResponse)).when(captchaValidationService).validateCaptcha(invalidCaptchaToken);
+        
+
+        assertThatThrownBy(() -> authService.register(request))
+            .isInstanceOf(InvalidCaptchaException.class);
+
+        assertThat(userRepository.existsByEmail("user@goaltracker.com")).isFalse();
     }
 
     /**
@@ -258,8 +308,13 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("createGuest: Should successfully create a temporary guest user and return valid auth response")
     void createGuestSuccess() {
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        GuestRequest request = new GuestRequest(validCaptchaToken);
+
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        
         // Act
-        var response = authService.createGuest();
+        var response = authService.createGuest(request);
 
         // Assert
         assertThat(response).isNotNull();
@@ -272,6 +327,26 @@ class AuthServiceIntegrationTest extends AbstractIntegrationTest {
 
         boolean existsInDb = userRepository.existsByEmail(response.email());
         assertThat(existsInDb).isTrue();
+    }
+
+    /**
+     * Test case for failled creation of a temporary guest user.
+     * <p>
+     * This test verifies that in tha case the {@link CaptchaValidationService} throws 
+     * a {@link InvalidCaptchaException} the auth service fails to create the guest
+     * </p>
+     */
+    @Test
+    @DisplayName("createGuest: Should throw InvalidCaptchaException when the captcha is invalid.")
+    void createGuestInvalidCaptcha() {
+        String invalidCaptchaToken = "invalid";
+        GuestRequest request = new GuestRequest(invalidCaptchaToken);
+        CaptchaResponseDto captchaResponse = new CaptchaResponseDto(false);
+        doThrow(new InvalidCaptchaException(captchaResponse)).when(captchaValidationService).validateCaptcha(invalidCaptchaToken);
+        
+
+        assertThatThrownBy(() -> authService.createGuest(request))
+            .isInstanceOf(InvalidCaptchaException.class);
     }
 
     /**

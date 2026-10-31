@@ -4,6 +4,7 @@ import com.goal_tracker.auth.dto.AuthResponse;
 import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
+import com.goal_tracker.auth.dto.GuestRequest;
 import com.goal_tracker.auth.exceptions.EmailAreadyInUseException;
 import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
@@ -33,6 +34,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtTokenProvider;
     private final GoalService goalService;
+    private final CaptchaValidationService captchaValidationService;
 
     /**
      * Constructor for dependency injection of the authentication service.
@@ -46,12 +48,14 @@ public class AuthService {
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtProvider jwtTokenProvider,
-            GoalService goalService
+            GoalService goalService,
+            CaptchaValidationService captchaValidationService
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.goalService = goalService;
+        this.captchaValidationService = captchaValidationService;
     }
 
     /**
@@ -64,6 +68,8 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        captchaValidationService.validateCaptcha(request.captchaToken());
+
         if (!request.passwordsMatch()) {
             throw new PasswordMismatchException();
         }
@@ -111,7 +117,8 @@ public class AuthService {
      * @return {@link AuthResponse} with the signed token, guest email, and guest flag.
      */
     @Transactional
-    public AuthResponse createGuest() {
+    public AuthResponse createGuest(GuestRequest request) {
+        captchaValidationService.validateCaptcha(request.captchaToken());
         String guestEmail = "guest_" + UUID.randomUUID() + "@goaltracker.local";
 
         User guest = new User();
