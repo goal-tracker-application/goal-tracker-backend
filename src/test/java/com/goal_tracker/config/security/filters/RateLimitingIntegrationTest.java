@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.doNothing;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -18,6 +20,7 @@ import org.springframework.http.MediaType;
 
 import com.goal_tracker.AbstractIntegrationTest;
 import com.goal_tracker.auth.dto.RegisterRequest;
+import com.goal_tracker.auth.service.CaptchaValidationService;
 import com.goal_tracker.errors.ErrorCode;
 
 import tools.jackson.databind.ObjectMapper;
@@ -38,6 +41,9 @@ class RateLimitingIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private CaptchaValidationService captchaValidationService;
 
     /**
      * Resets the Redis state before each test by flushing all keys, ensuring
@@ -64,12 +70,15 @@ class RateLimitingIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Should allow requests up to capacity limit and block with 429 afterwards")
     void testRateLimitingEnforcement() throws Exception {
+        String validCaptchaToken = "dummy-valid-captcha-token";
+
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
         String testEndpoint = "/auth/register";
 
-       String clientIp = "192.168.1.100";
+        String clientIp = "192.168.1.100";
 
         for (int i = 0; i < 5; i++) { 
-            RegisterRequest requestBody = new RegisterRequest("test"+i+"@examplo.com", "StrongPassword123!", "StrongPassword123!");
+            RegisterRequest requestBody = new RegisterRequest("test"+i+"@examplo.com", "StrongPassword123!", "StrongPassword123!",validCaptchaToken);
         
             mockMvc.perform(post(testEndpoint)
                             .header("X-Forwarded-For", clientIp)
@@ -77,7 +86,7 @@ class RateLimitingIntegrationTest extends AbstractIntegrationTest {
                             .content(objectMapper.writeValueAsString(requestBody)))
                     .andExpect(status().isCreated()); 
         }
-        RegisterRequest requestBody = new RegisterRequest("test@examplo.com", "StrongPassword123!", "StrongPassword123!");
+        RegisterRequest requestBody = new RegisterRequest("test@examplo.com", "StrongPassword123!", "StrongPassword123!", validCaptchaToken);
         
         mockMvc.perform(post(testEndpoint)
                             .header("X-Forwarded-For", clientIp)
