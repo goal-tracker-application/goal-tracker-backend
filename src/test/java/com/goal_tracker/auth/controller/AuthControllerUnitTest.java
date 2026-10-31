@@ -12,13 +12,17 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.goal_tracker.auth.dto.AuthResponse;
+import com.goal_tracker.auth.dto.CaptchaResponseDto;
+import com.goal_tracker.auth.dto.GuestRequest;
 import com.goal_tracker.auth.dto.LoginRequest;
 import com.goal_tracker.auth.dto.PasswordUpdateRequest;
 import com.goal_tracker.auth.dto.RegisterRequest;
 import com.goal_tracker.auth.exceptions.EmailAreadyInUseException;
 import com.goal_tracker.auth.exceptions.IncorrectCurrentPasswordException;
+import com.goal_tracker.auth.exceptions.InvalidCaptchaException;
 import com.goal_tracker.auth.exceptions.PasswordMismatchException;
 import com.goal_tracker.auth.service.AuthService;
+import com.goal_tracker.auth.service.CaptchaValidationService;
 import com.goal_tracker.errors.ErrorCode;
 import com.goal_tracker.exceptions.GlobalExceptionHandler;
 
@@ -30,6 +34,8 @@ import tools.jackson.databind.type.LogicalType;
 
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,6 +43,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -73,6 +82,9 @@ class AuthControllerUnitTest {
     @MockitoBean 
     private AuthController authController;
 
+    @MockitoBean
+    private CaptchaValidationService captchaValidationService;
+
     /**
      * Sets up the test environment before each test execution.
      * <p>
@@ -94,6 +106,7 @@ class AuthControllerUnitTest {
                 config.setCoercion(CoercionInputShape.String, CoercionAction.Fail)
             )
             .build();
+        captchaValidationService = Mockito.mock(CaptchaValidationService.class);
     }
 
     /**
@@ -103,8 +116,10 @@ class AuthControllerUnitTest {
     @Test
     @DisplayName("POST /auth/register - Should register user successfully when payload is valid")
     void registerShouldRegisterUserSuccessfully() throws Exception {
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
         // Arrange
-        RegisterRequest request = new RegisterRequest("test@example.com", "SecurePassword123!", "SecurePassword123!");
+        RegisterRequest request = new RegisterRequest("test@example.com", "SecurePassword123!", "SecurePassword123!", validCaptchaToken);
         AuthResponse response = new AuthResponse("mock-jwt-token","test@example.com", false);
 
         when(authService.register(any(RegisterRequest.class))).thenReturn(response);
@@ -121,18 +136,54 @@ class AuthControllerUnitTest {
     }
 
     /**
+     * Tests POST /auth/register failure due to invalid captcha token.
+     */
+    @Test
+    @DisplayName("POST /auth/register - Should return 400 Bad Request when the captcha token is invalid.")
+    void registerShouldReturn400WhenInvalidCaptchaToken() throws Exception {
+        String invalidCaptchaToken = "invalid";
+        RegisterRequest request = new RegisterRequest
+        (
+            "test@goaltracker.com", 
+            "SecurePassword123!", 
+            "SecurePassword123!",
+            invalidCaptchaToken
+        );
+
+        CaptchaResponseDto captchaResponse = new CaptchaResponseDto(false);
+        
+        doThrow(new InvalidCaptchaException(captchaResponse)).when(authService).register(request);
+        
+
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_INVALID_CAPTCHA.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_INVALID_CAPTCHA.getDefaultMessage()) )
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
+    }
+
+    /**
      * Tests POST /auth/register failure due to type mismatch in the JSON payload 
      * (e.g., passing invalid data types or malformed structures).
      */
     @Test
     @DisplayName("POST /auth/register - Should return 400 Bad Request when JSON payload has type mismatch")
     void registerShouldReturn400WhenTypeMismatch() throws Exception {
-        String malformedJson = "{\"email\": \"test@example.com\", \"password\": [ \"SecurePassword123!\"] , \"confirmPassword\": \"SecurePassword123!\" }";
-
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        Map<String,Object> maformedJsonMap = Map.of(
+            "email", "test@example.com",
+            "password" , List.of("SecurePassword123!"),
+            "confirmPassword", "SecurePassword123",
+            "captchaToken", validCaptchaToken
+        );
         // Act & Assert
         mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(malformedJson))
+                        .content(objectMapper.writeValueAsString(maformedJsonMap)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_TYPE_MISMATCH.name()))
@@ -147,7 +198,9 @@ class AuthControllerUnitTest {
     @Test
     @DisplayName("POST /auth/register - Should return 400 Bad Request when validation constraints fail")
     void registerShouldReturn400WhenValidationFails() throws Exception {
-        RegisterRequest request = new RegisterRequest("invalid-email", "SecurePassword123!", "SecurePassword123!");
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        RegisterRequest request = new RegisterRequest("invalid-email", "SecurePassword123!", "SecurePassword123!", validCaptchaToken);
 
         // Act & Assert
         mockMvc.perform(post("/auth/register")
@@ -167,11 +220,17 @@ class AuthControllerUnitTest {
     @Test
     @DisplayName("POST /auth/register - Should return 400 Bad Request when password is too weak")
     void registerShouldReturn400WhenPasswordIsTooWeak() throws Exception {
-        String weakPasswordJson = "{\"email\": \"test@example.com\", \"password\": \"12345\" , \"confirmPassword\": \"12345\" }";
-
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        Map<String,Object> weakPasswordJson = Map.of(
+            "email", "test@example.com",
+            "password" , "12345",
+            "confirmPassword", "12345",
+            "captchaToken", validCaptchaToken
+        );
         mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(weakPasswordJson))
+                        .content(objectMapper.writeValueAsString(weakPasswordJson)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(ErrorCode.ERR_VALIDATION_FAILED.name()))
@@ -186,7 +245,15 @@ class AuthControllerUnitTest {
     @Test
     @DisplayName("POST /auth/register - Should return 400 Bad Request when passwords mismatch")
     void registerShouldReturn400WhenPasswordsMismatch() throws Exception {
-        RegisterRequest request =  new RegisterRequest("test@example.com", "StrongPassword123!", "StrongPassword124!");
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        RegisterRequest request =  new RegisterRequest
+        (
+            "test@example.com", 
+            "StrongPassword123!", 
+            "StrongPassword124!",
+            validCaptchaToken
+        );
 
         when(authService.register(any(RegisterRequest.class)))
                 .thenThrow(new PasswordMismatchException());
@@ -208,8 +275,15 @@ class AuthControllerUnitTest {
     @Test
     @DisplayName("POST /auth/register - Should return 409 Conflict when email is already taken")
     void registerShouldReturn409WhenEmailAlreadyInUse() throws Exception {
-        // Arrange
-        RegisterRequest request = new RegisterRequest("existing@example.com", "SecurePassword123!", "SecurePassword123!");
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        RegisterRequest request = new RegisterRequest
+        (
+            "existing@example.com", 
+            "SecurePassword123!", 
+            "SecurePassword123!",
+            validCaptchaToken
+        );
 
         when(authService.register(any(RegisterRequest.class)))
                 .thenThrow(new EmailAreadyInUseException("existing@example.com"));
@@ -320,19 +394,48 @@ class AuthControllerUnitTest {
     @Test
     @DisplayName("POST /auth/guest - Should create guest session successfully")
     void createGuestShouldCreateGuestSuccessfully() throws Exception {
-        // Arrange
+        String validCaptchaToken = "dummy-valid-captcha-token";
+        doNothing().when(captchaValidationService).validateCaptcha(validCaptchaToken);
+        
+        GuestRequest request = new GuestRequest(validCaptchaToken);
         AuthResponse response = new AuthResponse("mock-guest-jwt-token", "guest_123@goaltracker.local", true);
 
-        when(authService.createGuest()).thenReturn(response);
+        when(authService.createGuest(request)).thenReturn(response);
 
         // Act & Assert
         mockMvc.perform(post("/auth/guest")
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.token").value("mock-guest-jwt-token"))
                 .andExpect(jsonPath("$.email").value("guest_123@goaltracker.local"))
                 .andExpect(jsonPath("$.isGuest").value(true));
+    }
+
+
+    /**
+     * Tests faillure guest session creation via POST /auth/guest.
+     * Expects bad request status after the service throws {@link InvalidCaptchaException}
+     */
+    @Test
+    @DisplayName("POST /auth/guest - Should throw InvalidCaptchaException when the capatcha token is invald")
+    void createGuestShouldReturn400WhenInvalidCaptchaToken() throws Exception {
+        String invalidCaptchaToken = "invalid";
+
+        GuestRequest request = new GuestRequest(invalidCaptchaToken);
+        CaptchaResponseDto captchaResponse = new CaptchaResponseDto(false);
+        doThrow(new InvalidCaptchaException(captchaResponse)).when(authService).createGuest(request);
+
+        // Act & Assert
+        mockMvc.perform(post("/auth/guest")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(ErrorCode.ERR_INVALID_CAPTCHA.name()))
+                .andExpect(jsonPath("$.message").value(ErrorCode.ERR_INVALID_CAPTCHA.getDefaultMessage()))
+                .andExpect(jsonPath("$.trackingId", startsWith("ERR-")));
     }
 
     /**

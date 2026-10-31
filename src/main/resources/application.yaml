@@ -28,6 +28,9 @@ app:
       capacity: ${APP_SECURITY_RATE_LIMIT_CAPACITY:5}
       refill-tokens: ${APP_SECURITY_RATE_LIMIT_REFILL_TOKENS:5}
       refill-duration-minutes: ${APP_SECURITY_RATE_LIMIT_REFILL_DURATION_MINUTES:1}
+    captcha:
+      secret-key: ${CAPTCHA_SECRET_KEY:dummy-secret-key}
+      verify-url: ${CAPTCHA_VERIFY_URL:https://www.google.com/recaptcha/api/siteverify}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
